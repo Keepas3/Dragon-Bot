@@ -7,3 +7,7 @@
 [2024-12-19 14:50:14] [INFO    ] discord.client: logging in using static token
 [2024-12-19 14:50:15] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: ce505e208a349a0ca3080032fbaf70ef).
 [2024-12-19 14:50:21] [INFO    ] discord: Message from keepas: Walking down
+[2024-12-19 15:02:42] [INFO    ] discord.client: logging in using static token
+[2024-12-19 15:03:51] [INFO    ] discord.client: logging in using static token
+[2024-12-19 15:03:52] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 08dffdcd89363fd0b8ced793071f8bdb).
+[2024-12-19 15:04:45] [INFO    ] discord: Message from keepas: Wow thats wild
