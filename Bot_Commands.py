@@ -1,9 +1,12 @@
+from tokenize import Double
 import discord
 import os
 import logging
 import praw
+import csv
 from discord.ext import commands
 import logging.handlers
+from datetime import timedelta 
 
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -88,7 +91,7 @@ async def stats(ctx):
 
 reddit = praw.Reddit(client_id=client_id,client_secret=client_secret, user_agent=user_agent)
 
-@bot.command(name = 'leaks')
+@bot.command(name = 'leaks') #Leaks command specify subreddit , type, and amount
 async def leaks(ctx, subreddit_name: str, post_type: str ='hot', limit: int=3 ):
     subreddit = reddit.subreddit(subreddit_name) 
     
@@ -110,7 +113,31 @@ async def leaks(ctx, subreddit_name: str, post_type: str ='hot', limit: int=3 ):
             embed.set_image(url=post.thumbnail) 
             await ctx.send(embed=embed)
 
+inappropriate_words = {}
+with open('profanity_en.csv', 'r', encoding='utf-8') as file:
+    reader = csv.DictReader(file)
+    for row in reader:
+        primary_word = row['text'].strip().lower()
+      #  words = [row['canonical_form_1'].strip().lower(), row['canonical_form_2'].strip().lower()]
+        
+        inappropriate_words[primary_word] = {
+            'severity_rating': float(row['severity_rating']),
+            'severity_description': row['severity_description']
+        } 
+        alternate_words = [ 
+            row['canonical_form_1'].strip().lower(), 
+            row.get('canonical_form_2', '').strip().lower(), 
+            row.get('canonical_form_3', '').strip().lower() 
+            ]
+        # alternate_word = row['canonical_form_1'].strip().lower()
+        # alternate_word2 = row['canonical_form_2'].strip().lower()
 
+        for alt_word in alternate_words: 
+            if alt_word and alt_word != primary_word: 
+                inappropriate_words[alt_word] = inappropriate_words[primary_word]
+   
+
+user_scores = {}        
 @bot.event
 async def on_message(message):
     if "error" in message.content.lower():
@@ -120,6 +147,40 @@ async def on_message(message):
         logger.warning(f'Message from {message.author}: {message.content}')
     else:
         logger.info(f'Message from {message.author}: {message.content}')   
+
+    if message.author ==bot.user:
+        return
+    
+    message_words = set(word.strip().lower() for word in message.content.split()) 
+    detected_words = inappropriate_words.keys() & message_words
+
+    severity_limits = { 
+        'Strong': 20,
+        'Severe': 9
+    }
+
+    for word in detected_words: 
+        severity_rating = inappropriate_words[word]['severity_rating'] 
+        severity_description = inappropriate_words[word]['severity_description']
+      #  severity = inappropriate_words[word]['severity_description'] 
+        user_id =message.author.id
+        if user_id not in user_scores:
+            user_scores[user_id] =0
+        user_scores[user_id] += severity_rating
+        if severity_description in severity_limits and user_scores[user_id] > severity_limits[severity_description]:
+            await message.channel.send(f"{message.author.mention}, you have exceeded the limit for using {severity_description} language. Further action will be taken.") 
+            timeout_duration = timedelta(minutes=10) # Timeout duration set to 10 minutes            
+            await message.author.timeout(timeout_duration, reason=f"Exceeded limit for {severity_description} language.") 
+            await message.channel.send(f"{message.author.mention} has been timed out for 10 minutes for using excessive inappropriate language.")            
+
+        if severity_description == 'Mild': 
+            await message.channel.send(f"{message.author.mention}, please avoid using mild inappropriate language. Your current score is {user_scores[user_id]}.") 
+        elif severity_description == 'Strong': 
+            await message.channel.send(f"{message.author.mention}, this is a warning! Strong inappropriate language is not tolerated. Your current score is {user_scores[user_id]}.") 
+        elif severity_description == 'Severe': 
+            await message.channel.send(f"{message.author.mention}, this is a serious warning! Severe inappropriate language will not be tolerated. Your current score is {user_scores[user_id]}.") 
+        break
+
 
     print(f'Message from {message.author}: {message.content}')
     await bot.process_commands(message)
