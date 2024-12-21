@@ -124,18 +124,18 @@ with open('profanity_en.csv', 'r', encoding='utf-8') as file:
             'severity_rating': float(row['severity_rating']),
             'severity_description': row['severity_description']
         } 
-        alternate_words = [ 
-            row['canonical_form_1'].strip().lower(), 
-            row.get('canonical_form_2', '').strip().lower(), 
-            row.get('canonical_form_3', '').strip().lower() 
-            ]
+        # alternate_words = [ 
+        #     row['canonical_form_1'].strip().lower(), 
+        #     row.get('canonical_form_2', '').strip().lower(), 
+        #     row.get('canonical_form_3', '').strip().lower() 
+        # ]
         # alternate_word = row['canonical_form_1'].strip().lower()
         # alternate_word2 = row['canonical_form_2'].strip().lower()
 
-        for alt_word in alternate_words: 
-            if alt_word and alt_word != primary_word: 
-                inappropriate_words[alt_word] = inappropriate_words[primary_word]
-   
+        # for alt_word in alternate_words: 
+        #     if alt_word and alt_word != primary_word: 
+        #         inappropriate_words[alt_word] = inappropriate_words[primary_word]
+#print("Inappropriate words loaded:", inappropriate_words) 
 
 user_scores = {}        
 @bot.event
@@ -154,34 +154,50 @@ async def on_message(message):
     message_words = set(word.strip().lower() for word in message.content.split()) 
     detected_words = inappropriate_words.keys() & message_words
 
+    
     severity_limits = { 
-        'Strong': 20,
-        'Severe': 9
+        'Strong': 7,
+        'Severe': 8
     }
 
     for word in detected_words: 
         severity_rating = inappropriate_words[word]['severity_rating'] 
         severity_description = inappropriate_words[word]['severity_description']
       #  severity = inappropriate_words[word]['severity_description'] 
+
         user_id =message.author.id
+        if severity_rating < 2: 
+            await message.channel.send(f"{message.author.mention}, please avoid using mild inappropriate language.") 
+            continue
         if user_id not in user_scores:
             user_scores[user_id] =0
         user_scores[user_id] += severity_rating
-        if severity_description in severity_limits and user_scores[user_id] > severity_limits[severity_description]:
-            await message.channel.send(f"{message.author.mention}, you have exceeded the limit for using {severity_description} language. Further action will be taken.") 
-            timeout_duration = timedelta(minutes=10) # Timeout duration set to 10 minutes            
-            await message.author.timeout(timeout_duration, reason=f"Exceeded limit for {severity_description} language.") 
-            await message.channel.send(f"{message.author.mention} has been timed out for 10 minutes for using excessive inappropriate language.")            
 
-        if severity_description == 'Mild': 
-            await message.channel.send(f"{message.author.mention}, please avoid using mild inappropriate language. Your current score is {user_scores[user_id]}.") 
-        elif severity_description == 'Strong': 
-            await message.channel.send(f"{message.author.mention}, this is a warning! Strong inappropriate language is not tolerated. Your current score is {user_scores[user_id]}.") 
+        if severity_description in severity_limits:
+            # severity_limits[severity_description] is the 7 or 8 is the limit and uses the 
+            limit = severity_limits[severity_description]
+            remaining_warnings = round((limit - user_scores[user_id]) / severity_rating)        
+        else:
+            remaining_warnings = float('inf')
+
+        if severity_description == 'Strong': 
+            await message.channel.send(f"{message.author.mention}, this is a warning! Strong inappropriate language is not tolerated. You have {remaining_warnings} warnings left. Your current score is {user_scores[user_id]}.") 
         elif severity_description == 'Severe': 
-            await message.channel.send(f"{message.author.mention}, this is a serious warning! Severe inappropriate language will not be tolerated. Your current score is {user_scores[user_id]}.") 
+            await message.channel.send(f"{message.author.mention}, this is a serious warning! Severe inappropriate language will not be tolerated. You have {remaining_warnings} warningsleft. Your current score is {user_scores[user_id]}.") 
+    
+        if severity_description in severity_limits and user_scores[user_id] > severity_limits[severity_description]:
+            await message.channel.send(f"{message.author.mention}, you have exceeded the limit for using {severity_description} language. Further action will be taken.")
+            try: 
+                timeout_duration = timedelta(minutes=1) # Timeout duration set to 10 minutes            
+                await message.author.timeout(timeout_duration, reason=f"Exceeded limit for {severity_description} language.") 
+                await message.channel.send(f"{message.author.mention} has been timed out for 1 minutes for using excessive inappropriate language.")  
+            except discord.Forbidden:
+                await message.channel.send(f"I do not have permission to timeout {message.author.mention}.")      
+            except discord.HTTPException:
+                await message.channel.send(f"Failed to timeout {message.author.mention} due to an error.")
         break
-
-
+        
+        
     print(f'Message from {message.author}: {message.content}')
     await bot.process_commands(message)
 
