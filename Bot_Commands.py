@@ -8,14 +8,19 @@ from discord.ext import commands
 from discord import app_commands
 import logging.handlers
 from datetime import timedelta 
+import requests
 
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 client_id = os.getenv('client_id')
 client_secret = os.getenv('client_secret')
 user_agent = os.getenv('user_agent')
+api_key = os.getenv('COC_api_key')
+clan_tag = '#2QQ2VCU82'.replace('#','%23')
 
 
+
+    
 class LevelFilter(logging.Filter):
     def __init__(self, level):
         self.level= level
@@ -79,11 +84,11 @@ GUILD_ID = discord.Object(id ='1318971913069920356') # used for only development
 other_ID = discord.Object(id = '1197262432935088249') # RISENXCHAMPIONS
 @bot.event
 async def on_ready():
-    await bot.tree.sync(guild = GUILD_ID) # Remove GUILD ID if using global
+    await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
     print(f'Logged in as {bot.user}!')
     print(f"Synced Commands to {GUILD_ID.id}")
 
-@bot.tree.command(name = "stats", description = "Stats of the bot", guild = GUILD_ID)
+@bot.tree.command(name = "stats", description = "Stats of the bot") #guild = GUILD_ID
 async def stats(interaction: discord.Interaction):
     server_count =len(bot.guilds)
     user_count = len(bot.users)
@@ -95,7 +100,7 @@ async def stats(interaction: discord.Interaction):
     print(f"Sending stats: {stats_message}") # Debugging print statement
     await interaction.response.send_message(stats_message)
 
-@bot.tree.command(name = "4k", description = "I Caught you", guild=GUILD_ID)
+@bot.tree.command(name = "4k", description = "I Caught you")
 async def fourK(interaction: discord.Interaction):
     await interaction.response.send_message(
     f"""** 
@@ -106,11 +111,124 @@ XS MAX GoPro hero 1 2 terrabyte xbox series x Dell UltraSharp 49Curved Monitor -
 2/3 CCD HD Super Motion Color Camera, 1080p Resolution Toshiba EM131A5C-SS Microwave Oven. **""" 
 )
 
+@bot.tree.command(name = "playerinfo", description = "Get player's general information")
+async def player_info(interaction: discord.Interaction, player_tag: str):
+   # player_tag = '#LOLLG98LJ'.replace('#', '%23')
+    player_tag = player_tag.replace('#', '%23')
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+    url = f'https://api.clashofclans.com/v1/players/{player_tag}' 
+    headers = { 
+        'Authorization': f'Bearer {api_key}', 
+        'Accept': 'application/json' 
+    } 
+    response = requests.get(url, headers=headers) 
+    if response.status_code == 200: 
+        player_data = response.json() 
+        player_information = (
+            f"**Player Information**\n" 
+            f"```yaml\n"
+            f"Name: {player_data['name']}\n" 
+            f"Tag: {player_data['tag']}\n"
+            f"THLVL: {player_data['townHallLevel']}\n" 
+            f"Trophies: {player_data['trophies']}\n" 
+            f"Best Trophies: {player_data['bestTrophies']}"
+            f"```\n"
 
+    )
+        await interaction.response.send_message(f"{player_information}")
+    else: 
+        await interaction.response.send_message(f"Error getting player information")
+
+@bot.tree.command(name="playertroops", description="Get a player's troop levels") 
+async def player_troops(interaction: discord.Interaction, player_tag: str): 
+    player_tag = player_tag.replace('#', '%23') 
+    url = f'https://api.clashofclans.com/v1/players/{player_tag}' 
+    headers = { 'Authorization': f'Bearer {api_key}', 
+    'Accept': 'application/json' 
+    }
+
+    response = requests.get(url, headers=headers) 
+    if response.status_code == 200: 
+        player_data = response.json() 
+        name = f"Name: {player_data['name']}\n"
+
+        filtered_troops = [troop for troop in player_data['troops'] if 'super' not in troop['name'].lower()]
+
+        troops = '\n'.join([f"{troop['name']}: Level {troop['level']}" for troop in filtered_troops])
+        troop_information = ( 
+            f"**Troop Levels**\n" 
+            f"```yaml\n" 
+            f"{troops}\n" 
+            f"```\n" 
+        )
+        await interaction.response.send_message(f" {name}{troop_information}") 
+    else: 
+        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')       
+
+# @bot.tree.command(name="clanmembers", description="Get Member info of clan", guild=GUILD_ID) 
+# async def clan_members(interaction: discord.Interaction): 
+#     await interaction.response.defer() # Defer the interaction to allow time for processing
+#     url = f'https://api.clashofclans.com/v1/clans/{clan_tag}'
+#     headers = { 'Authorization': f'Bearer {api_key}', 
+#     'Accept': 'application/json' 
+#     }
+#     response = requests.get(url, headers=headers) 
+#     if response.status_code == 200: 
+#         clan_data = response.json() 
+#         for member in clan_data['memberList']:
+#             member_list = ( 
+#                 f"** Member Information: ** \n"
+#                 f"Name: {member['name']}\n" 
+#                 f"Role: {member['role']}\n"
+#                 f"Donations: {member['donations']}\n" 
+#                 f"Donations Received: {member['donationsReceived']}"
+
+#        )
+#             await interaction.followup.send(member_list)
+#     else: 
+#         await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')  
+
+@bot.tree.command(name="clanuser", description="Get Clan info for a specific user") 
+async def user_info(interaction: discord.Interaction, username: str): 
+    await interaction.response.defer() # Defer the interaction to allow time for processing 
+    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}' 
+    headers = { 'Authorization': f'Bearer {api_key}', 
+    'Accept': 'application/json' 
+    } 
+    response = requests.get(url, headers=headers) 
+    if response.status_code == 200: 
+        clan_data = response.json() 
+        user_found = False
+
+        for member in clan_data['memberList']: 
+            if member['name'].lower() == username.lower(): 
+                member_info = ( f"**Member Information:**\n" 
+                f"```yaml\n"
+                f"Player Tag: {member['tag']}\n" 
+                f"Name: {member['name']}\n" 
+                f"Role: {member['role']}\n" 
+                f"Experience Level: {member['expLevel']}\n" 
+                f"Trophies: {member['trophies']}\n"
+                f"Donations: {member['donations']}\n" 
+                f"Donations Received: {member['donationsReceived']}" 
+                f"```\n"
+                ) 
+                chunks = [member_info[i:i + 2000] for i in range(0, len(member_info), 2000)] 
+                for chunk in chunks: 
+                    await interaction.followup.send(chunk) 
+
+                user_found = True 
+                break
+        if not user_found: 
+            await interaction.followup.send(f'User "{username}" not found in the clan.') 
+    else: 
+        await interaction.followup.send(f'Error: {response.status_code}, {response.text}')
+                
 
 reddit = praw.Reddit(client_id=client_id,client_secret=client_secret, user_agent=user_agent)
 
-@bot.tree.command(name = "receiveposts", description = "Recieve posts from Reddit", guild = GUILD_ID) #Leaks command specify subreddit , type, and amount
+@bot.tree.command(name = "receiveposts", description = "Recieve posts from Reddit") #Leaks command specify subreddit , type, and amount
 @app_commands.describe(subreddit_name="Name of the subreddit", post_type="Type of posts: hot, new, top", limit="Number of posts to retrieve (Max:8)")
 async def receive_posts(interaction: discord.Interaction, subreddit_name: str, post_type: str ='hot', limit: int=3 ):
     subreddit = reddit.subreddit(subreddit_name) 
@@ -239,7 +357,7 @@ async def on_message(message):
     print(f'Message from {message.author}: {message.content}')
     await bot.process_commands(message)
 
-@bot.tree.command(name = "warnings", description = "Get the number of warnings for a specific user", guild = GUILD_ID)
+@bot.tree.command(name = "warnings", description = "Get the number of warnings for a specific user")
 @app_commands.describe(user = "The user to check warnings for")
 async def checkwarnings(interaction: discord.Interaction, user: discord.User):
     user_id = user.id
@@ -249,7 +367,7 @@ async def checkwarnings(interaction: discord.Interaction, user: discord.User):
         warnings_count = 2
     await interaction.response.send_message(f"{user.mention} has {warnings_count} warning(s).")
 
-@bot.tree.command(name = "adjustwarnings", description = "Adjust amount ofwarnings for a user", guild = GUILD_ID)
+@bot.tree.command(name = "adjustwarnings", description = "Adjust amount ofwarnings for a user")
 @app_commands.describe(user = "The user to adjust warnings for", warnings = "The number of remaining warnings to set")
 async def adjustwarnings(interaction: discord.Interaction, user: discord.User, warnings: int):
     user_id = user.id
