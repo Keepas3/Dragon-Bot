@@ -306,9 +306,9 @@ async def on_message(message):
       #  severity = inappropriate_words[word]['severity_description'] 
 
         user_id =message.author.id
-        if severity_rating < 2.0: 
-            await message.channel.send(f"{message.author.mention}, please avoid using mild inappropriate language.") 
-            continue
+        # if severity_rating < 2.0: 
+        #     await message.channel.send(f"{message.author.mention}, please avoid using mild inappropriate language.") 
+        #     continue
         if user_id not in user_scores:
             user_scores[user_id] =0
         if user_id not in user_warnings:
@@ -339,9 +339,9 @@ async def on_message(message):
         if remaining_warnings < 1:
             await message.channel.send(f"{message.author.mention}, you have exceeded the limit for using {severity_description} language.")
             try: 
-                timeout_duration = timedelta(minutes=1) # Timeout duration set to 10 minutes            
+                timeout_duration = timedelta(minutes=30) # Timeout duration set to 10 minutes            
                 await message.author.timeout(timeout_duration, reason=f"Exceeded limit for {severity_description} language.") 
-                await message.channel.send(f"{message.author.mention} has been timed out for 1 minutes for using excessive inappropriate language.")  
+                await message.channel.send(f"{message.author.mention} has been timed out for {timeout_duration} minutes for using excessive inappropriate language.")  
                 user_warnings[user_id] = 1
                 remaining_warnings = 1.0
             except discord.Forbidden:
