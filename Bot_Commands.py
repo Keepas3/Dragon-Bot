@@ -164,8 +164,9 @@ async def player_troops(interaction: discord.Interaction, player_tag: str):
         )
         await interaction.response.send_message(f" {name}{troop_information}") 
     else: 
-        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')       
-
+        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')    
+           
+#Lists all clan members in clan contains too much characters and clogs up whole screen 
 # @bot.tree.command(name="clanmembers", description="Get Member info of clan", guild=GUILD_ID) 
 # async def clan_members(interaction: discord.Interaction): 
 #     await interaction.response.defer() # Defer the interaction to allow time for processing
@@ -339,7 +340,7 @@ async def on_message(message):
         if remaining_warnings < 1:
             await message.channel.send(f"{message.author.mention}, you have exceeded the limit for using {severity_description} language.")
             try: 
-                timeout_duration = timedelta(minutes=30) # Timeout duration set to 10 minutes            
+                timeout_duration = timedelta(minutes=30) # Timeout duration set to 30 minutes            
                 await message.author.timeout(timeout_duration, reason=f"Exceeded limit for {severity_description} language.") 
                 await message.channel.send(f"{message.author.mention} has been timed out for {timeout_duration} minutes for using excessive inappropriate language.")  
                 user_warnings[user_id] = 1
