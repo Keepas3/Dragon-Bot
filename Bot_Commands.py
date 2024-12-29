@@ -7,26 +7,33 @@ import csv
 from discord.ext import commands
 from discord import app_commands
 import logging.handlers
-from datetime import timedelta 
+from datetime import datetime, timedelta 
 import requests
+import random
 
 
 TOKEN = os.getenv('DISCORD_TOKEN')
+ #For recieving posts on reddit
 client_id = os.getenv('client_id')
 client_secret = os.getenv('client_secret')
 user_agent = os.getenv('user_agent')
-api_key = os.getenv('COC_api_key')
+#Clash of Clans stuff
+api_key = os.getenv('COC_api_key2')
 clan_tag = '#2QQ2VCU82'.replace('#','%23')
 
 
 
-    
 class LevelFilter(logging.Filter):
     def __init__(self, level):
         self.level= level
 
     def filter(self, record):
         return record.levelno == self.level
+
+def format_datetime(dt_str):
+    dt = datetime.strptime(dt_str, '%Y%m%dT%H%M%S.%fZ')
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+    
 
 def setup_logging(): # Set up loggers 
     logger = logging.getLogger('discord') 
@@ -79,14 +86,15 @@ intents.message_content = True
 intents.presences = True  # Enable the presence intent
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
 #bot.tree = discord.app_commands.CommandTree(bot)
-GUILD_ID = discord.Object(id ='1318971913069920356') # used for only development server
-other_ID = discord.Object(id = '1197262432935088249') # RISENXCHAMPIONS
+#GUILD_ID = discord.Object(id ='1318971913069920356') # used for only development server
+#other_ID = discord.Object(id = '1197262432935088249') # RISENXCHAMPIONS
 @bot.event
 async def on_ready():
     await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
     print(f'Logged in as {bot.user}!')
-    print(f"Synced Commands to {GUILD_ID.id}")
+  #  print(f"Synced Commands to {GUILD_ID.id}")
 
 @bot.tree.command(name = "stats", description = "Stats of the bot") #guild = GUILD_ID
 async def stats(interaction: discord.Interaction):
@@ -110,6 +118,15 @@ Cargador Compatible iPhone 1A 5 W 1400 + Cable 100% 1 Metro Blanco Compatible iP
 XS MAX GoPro hero 1 2 terrabyte xbox series x Dell UltraSharp 49Curved Monitor - U4919DW Sony HDC-3300R 
 2/3 CCD HD Super Motion Color Camera, 1080p Resolution Toshiba EM131A5C-SS Microwave Oven. **""" 
 )
+
+@bot.tree.command(name="flip", description="Flip the coin (heads or tails)")
+async def ping(interaction: discord.Interaction):
+    integer1 = random.randint(1,2)
+    if integer1 == 1:
+        await interaction.response.send_message("The coin flips to... Heads!!!")
+    elif integer1 == 2:
+        await interaction.response.send_message("The coin flips to... Tails!!!")
+
 
 @bot.tree.command(name = "playerinfo", description = "Get player's general information")
 async def player_info(interaction: discord.Interaction, player_tag: str):
@@ -164,8 +181,8 @@ async def player_troops(interaction: discord.Interaction, player_tag: str):
         )
         await interaction.response.send_message(f" {name}{troop_information}") 
     else: 
-        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')    
-           
+        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}') 
+
 #Lists all clan members in clan contains too much characters and clogs up whole screen 
 # @bot.tree.command(name="clanmembers", description="Get Member info of clan", guild=GUILD_ID) 
 # async def clan_members(interaction: discord.Interaction): 
@@ -189,6 +206,41 @@ async def player_troops(interaction: discord.Interaction, player_tag: str):
 #             await interaction.followup.send(member_list)
 #     else: 
 #         await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')  
+
+#All the info you get is start and end date :(
+@bot.tree.command(name ="goldpass", description= "Information about start/end of current gold pass")
+async def goldpass(interaction: discord.Interaction):
+    await interaction.response.defer()
+    url = f'https://api.clashofclans.com/v1/goldpass/seasons/current'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+    'Accept': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code ==200:
+        gold_pass_data = response.json()
+        
+        start = gold_pass_data.get('startTime')
+        end = gold_pass_data.get('endTime')
+
+        start_date = format_datetime(start)
+        end_date = format_datetime(end)
+        pass_info = (
+            f"** Gold Pass:**\n"
+            f"```yaml\n"
+           # f"Current Gold Pass Season: {gold_pass_data['name']}\n"
+            f"Start Date:{start_date}\n"
+            f"End Date:{end_date}\n"
+            f"```"
+
+        )
+        await interaction.followup.send(pass_info)
+    else: 
+        await interaction.followup.send(f"Error retrieving gold pass information: {response.status_code}, {response.text}")
+    
+
+    
+    
 
 @bot.tree.command(name="clanuser", description="Get Clan info for a specific user") 
 async def user_info(interaction: discord.Interaction, username: str): 
@@ -226,6 +278,191 @@ async def user_info(interaction: discord.Interaction, username: str):
     else: 
         await interaction.followup.send(f'Error: {response.status_code}, {response.text}')
                 
+@bot.tree.command(name="claninfo", description="Retrieve information about the clan")
+async def clanInfo(interaction: discord.Interaction):
+    await interaction.response.defer()  # Defer the interaction to allow time for processing
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Accept': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+    print(f"Response status: {response.status_code}, Response text: {response.text}")  # Debugging print statement
+    if response.status_code == 200:
+        clan_data = response.json()
+        
+        clan_info = (
+            f"**Clan Information**\n"
+            f"```yaml\n"
+            f"Name: {clan_data['name']}\n"
+            f"Tag: {clan_data['tag']}\n"
+            f"Level: {clan_data['clanLevel']}\n"
+            f"Points: {clan_data['clanPoints']}\n"
+            f"Members: {clan_data['members']}\n"
+            f"Description: {clan_data['description']}\n"
+            f"Location: {clan_data['location']['name']}\n"
+            f"```\n"
+        )
+
+        await interaction.followup.send(clan_info)
+    elif response.status_code == 404:
+        await interaction.followup.send("No information found for the specified clan.")
+    else:
+        await interaction.followup.send(f"Error retrieving clan info: {response.status_code}, {response.text}")
+
+
+
+
+
+
+def format_datetime(dt_str):
+    dt = datetime.strptime(dt_str, '%Y%m%dT%H%M%S.%fZ')
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+@bot.tree.command(name="capitalraid", description="Retrieve information about capital raid seasons for the specified clan")
+async def capitalRaid(interaction: discord.Interaction):
+    await interaction.response.defer()  # Defer the interaction to allow time for processing
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/capitalraidseasons'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Accept': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+    print(f"Response status: {response.status_code}, Response text: {response.text}")  # Debugging print statement
+    if response.status_code == 200:
+        raid_data = response.json()
+        seasons = raid_data.get('items', [])
+        
+        if not seasons:
+            await interaction.followup.send("No capital raid seasons found for the specified clan.")
+            return
+
+        raid_info_list = []
+        for i, entry in enumerate(seasons[:5]):  # Limit to the first 5 seasons for brevity
+            state = entry.get('state','N/A' )
+            start_time = format_datetime(entry.get('startTime', 'N/A'))
+            end_time = format_datetime(entry.get('endTime', 'N/A'))
+         #   attack_log = entry.get('attacks', [])
+
+            members = entry.get('members', [])
+            print(f"Members: {members}")
+            member_loot_stats = {}
+            for member in members:
+               # attacker = attack.get('members', {})
+                member_name = member.get('name', 'Total')
+              #  print(f"Attacker info: {attacker}")  # Debugging print statement
+                total_loot = member.get('capitalResourcesLooted', 0)
+
+                if member_name in member_loot_stats:
+                    member_loot_stats[member_name] += total_loot
+                else:
+                    member_loot_stats[member_name] = total_loot
+            print(f"Member loot stats: {member_loot_stats}")  # Debugging print statement
+
+            member_stats = "\n".join(
+                [f"{member}: {loot} loot" for member, loot in member_loot_stats.items()]
+            )
+            
+            raid_info = (
+                f"**Season #{i + 1}**\n"
+                f"```yaml\n"
+                f"Status: {state}\n"
+                f"Start Time: {start_time}\n"
+                f"End Time: {end_time}\n"
+                f"Member Loot Stats:\n{member_stats}\n"
+                f"```\n"
+            )
+            raid_info_list.append(raid_info)
+        
+        chunk_size = 2000
+        raid_info_message = "\n".join(raid_info_list)
+        for i in range(0, len(raid_info_message), chunk_size):
+            await interaction.followup.send(raid_info_message[i:i+chunk_size])
+    elif response.status_code == 404:
+        await interaction.followup.send("No capital raid seasons found for the specified clan.")
+    else:
+        await interaction.followup.send(f"Error retrieving capital raid seasons: {response.status_code}, {response.text}")
+
+# @bot.tree.command(name="warlog", description="Retrieve the war log for the specified clan")
+# async def warLog(interaction: discord.Interaction):
+#     await interaction.response.defer()  # Defer the interaction to allow time for processing
+#     if not api_key:
+#         raise ValueError("API KEY NOT FOUND")
+#     url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/warlog'
+#     headers = {
+#         'Authorization': f'Bearer {api_key}',
+#         'Accept': 'application/json'
+#     }
+#     response = requests.get(url, headers=headers)
+#     if response.status_code == 200:
+#         war_log = response.json()
+#         war_entries = war_log.get('items', [])
+        
+#         if not war_entries:
+#             await interaction.followup.send("No war log entries found for the specified clan.")
+#             return
+
+#         war_info_list = [
+#             (
+#                 f"**War #{i + 1}**\n"
+#                 f"Result: {entry['result']}\n"
+#                 f"Opponent: {entry['opponent']['name']} (Tag: {entry['opponent']['tag']})\n"
+#                 f"Clan Stars: {entry['clan']['stars']}, Clan Destruction: {entry['clan']['destructionPercentage']}%\n"
+#                 f"Opponent Stars: {entry['opponent']['stars']}, Opponent Destruction: {entry['opponent']['destructionPercentage']}%\n"
+#                 f"War Date: {entry['endTime']}\n"
+#             )
+#             for i, entry in enumerate(war_entries)
+#         ]
+
+#         war_info_message = "\n".join(war_info_list)
+        
+#         await interaction.followup.send(war_info_message)
+#     elif response.status_code == 404:
+#         await interaction.followup.send("No war log found for the specified clan.")
+#     else:
+#         await interaction.followup.send(f"Error retrieving war log: {response.status_code}, {response.text}")
+
+
+
+
+# @bot.tree.command(name = "currentwar", description = "Recieve information about current war")
+# async def warInfo(interaction:discord.Interaction):
+#     await interaction.response.defer() # Defer the interaction to allow time for processing 
+    
+#     if not api_key:
+#         raise ValueError("API KEY NOT FOUND")
+#     url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/currentwar' 
+#     headers = { 'Authorization': f'Bearer {api_key}', 
+#     'Accept': 'application/json' 
+#     } 
+#     response = requests.get(url, headers=headers) 
+#     print(f"Response status: {response.status_code}, Response text: {response.text}") # Debugging print statement
+#     if response.status_code == 200: 
+#         war_data = response.json() 
+
+#         war_info = (
+#             f"**Current War Information**\n"
+#             f"State: {war_data['state']}\n"
+#             f"Team Size: {war_data['teamSize']}\n" 
+#             f"Clan: {war_data['clan']['name']} (Tag: {war_data['clan']['tag']})\n" 
+#             f"Opponent: {war_data['opponent']['name']} (Tag: {war_data['opponent']['tag']})\n" 
+#             f"Clan Stars: {war_data['clan']['stars']}\n" 
+#             f"Opponent Stars: {war_data['opponent']['stars']}\n" 
+#             f"Clan Destruction Percentage: {war_data['clan']['destructionPercentage']}\n" 
+#             f"Opponent Destruction Percentage: {war_data['opponent']['destructionPercentage']}\n"
+#         )
+
+#         await interaction.followup.send(war_info)
+#     elif response.status_code == 404: 
+#         await interaction.followup.send("No current war found for the specified clan.")
+#     else:
+#         await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
+
+
 
 reddit = praw.Reddit(client_id=client_id,client_secret=client_secret, user_agent=user_agent)
 
