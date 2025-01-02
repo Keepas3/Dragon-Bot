@@ -19,7 +19,7 @@ user_agent = 'your reddit user agent"
 api_key = 'your clash api key" (Obtained on clash of clans api)
 
 Installation:
-1. git clone https://github.com/yourusername/VCRTS.git
-2. Check the requirements.txt for libraries to install (Discord.py and praw)
+1. git clone https://github.com/Keepas3/Discord-Bot.git
+2. Make sure to install all the dependencies: pip install -r requirements.txt
 3. Run and compile file with python Bot_Commands.py
 
