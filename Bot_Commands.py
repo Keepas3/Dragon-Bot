@@ -98,7 +98,7 @@ async def clear_commands():
         print({e})
 @bot.event
 async def on_ready():
-    await clear_commands()
+    #await clear_commands()
     # await bot.tree.clear_commands(guild=None) # Clear global commands
     # print("Clearing previous commands")
     await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
@@ -129,7 +129,7 @@ XS MAX GoPro hero 1 2 terrabyte xbox series x Dell UltraSharp 49Curved Monitor -
 )
 
 @bot.tree.command(name="flipcoin", description="Flip coin (heads or tails)")
-async def ping(interaction: discord.Interaction):
+async def flip(interaction: discord.Interaction):
     integer1 = random.randint(1,2)
     if integer1 == 1:
         await interaction.response.send_message("The coin flips to... Heads!!!")
@@ -227,7 +227,7 @@ async def player_heroes(interaction: discord.Interaction, player_tag: str):
     if response.status_code == 200:
         player_data = response.json()
         name = player_data.get('name')
-       # seasons = raid_data.get('items', [])
+      
 
         #Creates a list that iterates over each hero in player_data heroes
         filtered_heroes = [hero for hero in player_data['heroes'] if hero['village'] != 'builderBase'] 
@@ -344,6 +344,62 @@ async def goldpass(interaction: discord.Interaction):
     else: 
         await interaction.followup.send(f"Error retrieving gold pass information: {response.status_code}, {response.text}")
     
+@bot.tree.command(name ="lookupclans", description = "search for clans")
+@app_commands.describe(clanname = "The clan's name", war_frequency = "Filter by war frequency (always)", min_members = "Filter by minimum num. of members", 
+max_members = "Filter by maximum num. of members", minclan_level = "Filter by clan Level", limits="Number of clans to return (default 1, max 5)")
+async def lookup_clans(interaction: discord.Interaction, clanname: str, war_frequency: str = None, min_members: int = None, 
+max_members: int = None, minclan_level: int = None , limits: int=1
+):
+    if limits <1 or limits > 3:
+        limits = 1
+
+    await interaction.response.defer()
+    url = f'https://api.clashofclans.com/v1/clans?name={clanname}'
+    if war_frequency:
+        url+= f'&warFrequency={war_frequency}'
+    if min_members:
+        url+= f'&minMembers={min_members}'
+    if max_members:
+        url+= f'&maxMembers={max_members}'
+    if minclan_level:
+        url+= f'&minClanLevel={minclan_level}' 
+    if limits:
+        url+=f'&limit={limits}'
+
+    headers = { 'Authorization': f'Bearer {api_key}',
+    'Accept': 'application/json'
+    }
+    response = requests.get(url, headers= headers)
+    if response.status_code == 200:
+        clan_data = response.json()
+        if 'items'in clan_data:
+            clans = clan_data['items']
+            clan_info_list = []
+
+            for clan in clans: 
+                clan_info = (
+                   f"```yaml\n"
+                   f"Clan Name: {clan['name']}\n" 
+                   f"Clan Level: {clan['clanLevel']}\n" 
+                   f"Members: {clan['members']}\n" 
+                   f"Type: {clan['type']}\n" 
+                   f"War Frequency: {clan['warFrequency']}\n" 
+                   f"War Wins: {clan['warWins']}\n" 
+                   f"War Log Public? {clan['isWarLogPublic']}\n"
+                   f"Location: {clan['location']['name'] if 'location' in clan else 'N/A'}\n" 
+                   f"```"
+                )
+                clan_info_list.append(clan_info)
+                clan_info_formatted = "\n".join(clan_info_list)
+               
+        else:
+            clan_info_formatted = "No clans found matching this criteria"
+
+    else:
+        clan_info_formatted= "Failed to retrieve clans. Please try again Later."
+
+    await interaction.followup.send(clan_info_formatted)
+
 
 
 @bot.tree.command(name="lookupmember", description="Get Clan info for a specific user") 
