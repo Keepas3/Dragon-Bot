@@ -102,10 +102,8 @@ async def clear_commands():
         print({e})
 @bot.event
 async def on_ready():
-    #await clear_commands()
-    # await bot.tree.clear_commands(guild=None) # Clear global commands
-    # print("Clearing previous commands")
     await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
+    await bot.change_presence(activity=discord.Game(name='With Fire'))
     print(f'Logged in as {bot.user}!')
   #  print(f"Synced Commands to {GUILD_ID.id}")
 
