@@ -7,13 +7,14 @@ import csv
 from discord.ext import commands
 from discord import app_commands
 import logging.handlers
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta, timezone
 import requests
 import random
+ 
 
 
 TOKEN = os.getenv('DISCORD_TOKEN')
- #For recieving posts on reddit
+#For recieving posts on reddit
 client_id = os.getenv('client_id')
 client_secret = os.getenv('client_secret')
 user_agent = os.getenv('user_agent')
@@ -33,10 +34,23 @@ def format_datetime(dt_str):
     if not dt_str:
         return "N/A"
     try: 
-        dt = datetime.strptime(dt_str,'%Y%m%dT%H%M%S.%fZ')
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
+        dt = datetime.strptime(dt_str, '%Y%m%dT%H%M%S.%fZ').replace(tzinfo=timezone.utc)
+        # Convert to Eastern Standard Time (EST)
+        est = dt.astimezone(timezone(timedelta(hours=-5)))
+        return est.strftime('%Y-%m-%d %H:%M:%S %p EST')
     except ValueError:
         return "N/A"
+def format_month_day_year(dt_str):
+    if not dt_str:
+        return "N/A"
+    try: 
+        dt = datetime.strptime(dt_str, '%Y%m%dT%H%M%S.%fZ').replace(tzinfo=timezone.utc)
+        # Convert to Eastern Standard Time (EST)
+        est = dt.astimezone(timezone(timedelta(hours=-5)))
+        return est.strftime('%m-%d-%Y')
+    except ValueError:
+        return "N/A"
+
 
 
 def setup_logging(): # Set up loggers 
@@ -108,6 +122,11 @@ async def on_ready():
     await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
     print(f'Logged in as {bot.user}!')
   #  print(f"Synced Commands to {GUILD_ID.id}")
+
+@bot.tree.command(name ="announce", description ="Make an announcement")
+async def announce(interaction: discord.Interaction, message: str):
+    await interaction.response.send_message(message)
+
 
 @bot.tree.command(name = "stats", description = "Stats of the bot") #guild = GUILD_ID
 async def stats(interaction: discord.Interaction):
@@ -186,7 +205,7 @@ async def player_info(interaction: discord.Interaction, player_tag: str):
         filtered_labels = ', '.join([f"{label['name']}" for label in labels])
 
         player_information = (
-            f"**Player Information**\n" 
+            f"** Player Information **\n" 
             f"```yaml\n"
             f"Name: {player_data['name']}\n" 
             f"Tag: {player_data['tag']}\n"
@@ -273,7 +292,7 @@ async def player_heroes(interaction: discord.Interaction, player_tag: str):
         for equip in filtered_equipment])
 
 
-        hero_informaton = (
+        hero_information = (
             f"```yaml\n"
             f"Name: {name} \n"
             f"Tag: {player_data['tag']}\n"
@@ -283,7 +302,7 @@ async def player_heroes(interaction: discord.Interaction, player_tag: str):
             f"{equipment_details}\n"
             f"```\n"
         )
-        await interaction.response.send_message(f'{hero_informaton}')
+        await interaction.response.send_message(f'{hero_information}')
     else:
         await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')
 
@@ -337,7 +356,7 @@ async def clan_members(interaction: discord.Interaction):
             if role in ['coLeader', 'leader', 'elder']:
                 role = role.upper()
             member_list += ( 
-            f"{member['clanRank']}. {member['name']}, Role: {role}\n" 
+            f"{member['clanRank']}. {member['name']}, Role: {role}, TH: {member['townHallLevel']}\n" 
 
             ) 
         member_list += "```"
@@ -365,7 +384,7 @@ async def goldpass(interaction: discord.Interaction):
         start_date = format_datetime(start)
         end_date = format_datetime(end)
         pass_info = (
-            f"** Gold Pass:**\n"
+            f"** Gold Pass: **\n"
             f"```yaml\n"
            # f"Current Gold Pass Season: {gold_pass_data['name']}\n"
             f"Start Date:{start_date}\n"
@@ -449,15 +468,15 @@ async def user_info(interaction: discord.Interaction, username: str):
 
         for member in clan_data['memberList']: 
             if member['name'].lower() == username.lower(): 
-                member_info = ( f"**Member Information:**\n" 
+                member_info = ( f"** Member Information: **\n" 
                 f"```yaml\n"
                 f"Player Tag: {member['tag']}\n" 
-                f"Name: {member['name']}\n" 
+                f"{member['clanRank']}. {member['name']}\n" 
                 f"Role: {member['role']}\n" 
-                f"Experience Level: {member['expLevel']}\n" 
-                f"Trophies: {member['trophies']}\n"
-                f"Donations: {member['donations']}\n" 
-                f"Donations Received: {member['donationsReceived']}" 
+                f"TownHall Level: {member['townHallLevel']}\n" 
+                f"Trophies: {member['trophies']} | {member['league']['name']}\n"
+                f"Builderbase Trophies: {member['builderBaseTrophies']} | {member['builderBaseLeague']['name']}\n" 
+                f"Donations: {member['donations']} | Donations Received: {member['donationsReceived']}\n" 
                 f"```\n"
                 ) 
                 chunks = [member_info[i:i + 2000] for i in range(0, len(member_info), 2000)] 
@@ -487,15 +506,15 @@ async def clanInfo(interaction: discord.Interaction):
         clan_data = response.json()
         
         clan_info = (
-            f"**Clan Information**\n"
             f"```yaml\n"
             f"Name: {clan_data['name']}\n"
             f"Tag: {clan_data['tag']}\n"
             f"Clan Level: {clan_data['clanLevel']}\n"
             f"Clan Points: {clan_data['clanPoints']}\n"
-            f"Members: {clan_data['members']}\n"
+            f"Members: {clan_data['members']} / 50\n"
             f"Description: {clan_data['description']}\n"
             f"Required Trophies: {clan_data['requiredTrophies']}\n"
+            f"Win/loss ratio: {clan_data['warWins']} / {clan_data['warLosses']}\n"
             f"Location: {clan_data['location']['name']}\n"
             f"```\n"
         )
@@ -510,7 +529,7 @@ async def clanInfo(interaction: discord.Interaction):
 
 
 
-@bot.tree.command(name="capitalraid", description="Retrieve information about info on current raid for the clan")
+@bot.tree.command(name="capitalraid", description="Retrieve information about on current capital raid")
 async def capitalRaid(interaction: discord.Interaction):
     await interaction.response.defer()  # Defer the interaction to allow time for processing
     if not api_key:
@@ -531,7 +550,7 @@ async def capitalRaid(interaction: discord.Interaction):
             return
 
         raid_info_list = []
-        for i, entry in enumerate(seasons[:1]):  # Limit to the first 5 seasons for brevity
+        for i, entry in enumerate(seasons[:1]):  # Limit to the first season
             state = entry.get('state','N/A' )
             start_time = format_datetime(entry.get('startTime', 'N/A'))
             end_time = format_datetime(entry.get('endTime', 'N/A'))
@@ -594,7 +613,8 @@ async def capitalRaid(interaction: discord.Interaction):
 
         
 @bot.tree.command(name="previousraids", description="Retrieve information about capital raid seasons for the clan")
-async def previous_raids(interaction: discord.Interaction):
+@app_commands.describe(limit = "The number of raids to retrieve (default:2, max:5)")
+async def previous_raids(interaction: discord.Interaction, limit: int =2):
     await interaction.response.defer()  # Defer the interaction to allow time for processing
     if not api_key:
         raise ValueError("API KEY NOT FOUND")
@@ -614,18 +634,24 @@ async def previous_raids(interaction: discord.Interaction):
             return
 
         raid_info_list = []
-        for i, entry in enumerate(seasons[:5]):  # Limit to the first 5 seasons for brevity
+        limit = max(2,min(limit,5))
+        for i, entry in enumerate(seasons[:limit]):  # Limit to the first 5 seasons for brevity
             state = entry.get('state','N/A' )
-            start_time = format_datetime(entry.get('startTime', 'N/A'))
-            end_time = format_datetime(entry.get('endTime', 'N/A'))
+            start_time = format_month_day_year(entry.get('startTime', 'N/A'))
+            end_time = format_month_day_year(entry.get('endTime', 'N/A'))
             capitalTotalLoot = entry.get('capitalTotalLoot')
+            reward = entry.get('offensiveReward') + entry.get('defensiveReward')
+            if reward ==0:
+                reward = 'N/A'
+
             raid_info = (
-                f"**Season #{i + 1}**\n"
                 f"```yaml\n"
+                f"** Raid#{i+1} **\n"
                 f"Status: {state}\n"
-                f"Start Time: {start_time}\n"
-                f"End Time: {end_time}\n"
-                f"Total Loot Obtained: {capitalTotalLoot}"
+                f"Start time to End time: {start_time} - {end_time}\n"
+                f"Capital Loot Obtained: {capitalTotalLoot}\n"
+                f"Total Attacks: {entry.get('totalAttacks')} | Districts Destroyed: {entry.get('enemyDistrictsDestroyed')}\n"
+                f"Raid Medals Earned: {reward}\n"
                 f"```\n"
             )
             raid_info_list.append(raid_info)
@@ -668,14 +694,14 @@ async def warLog(interaction: discord.Interaction, limit: int=1):
         war_info_list = [
             (
                 f'```yaml\n'
-                f"**War#{i + 1}**\n"
+                f"** War#{i + 1} **\n"
                 f"Result: {entry['result']}\n"
                 f"Team Size: {entry['teamSize']}\n"
                 f"Opponent: {entry['opponent']['name']} (Tag: {entry['opponent']['tag']})\n"
                 f"Clan Stars: {entry['clan']['stars']}, Clan Destruction: {entry['clan']['destructionPercentage']}%\n"
                 f"Opponent Stars: {entry['opponent']['stars']}, Opponent Destruction: {entry['opponent']['destructionPercentage']}%\n"
                 f"Exp Gained: {entry['clan']['expEarned']}, Clan Level: {entry['clan'].get('clanLevel', 'N/A')}\n"
-                f"End Date: {format_datetime(entry.get('endTime', 'N/A'))}\n" # Correctly retrieve and format endTime for each entry
+                f"End Date: {format_datetime(entry.get('endTime', 'N/A'))}\n" 
                 f"```\n"
             )
             for i, entry in enumerate(war_entries)
@@ -702,22 +728,29 @@ async def warInfo(interaction:discord.Interaction):
     'Accept': 'application/json' 
     } 
     response = requests.get(url, headers=headers) 
-    print(f"Response status: {response.status_code}, Response text: {response.text}") # Debugging print statement
+   # print(f"Response status: {response.status_code}, Response text: {response.text}") # Debugging print statement
     if response.status_code == 200: 
         war_data = response.json() 
 
-        if war_data['state'] == 'inWar':
+        if war_data['state'] == 'inWar' or war_data['state'] == 'warEnded':
+            start_time = format_datetime(war_data.get('startTime', 'N/A'))
+            end_time = format_datetime(war_data.get('endTime', 'N/A'))
+            numofAttacks = war_data['teamSize'] * 2
+            # clan_badges = war_data['clan']['badgeUrls']
+            # medium_badge_url = clan_badges['medium']
             war_info = (
                 f'```yaml\n'
                 f"**Current War Information**\n"
                 f"State: {war_data['state']}\n"
-                f"Team Size: {war_data['teamSize']}\n" 
-                f"Clan: {war_data['clan']['name']} (Tag: {war_data['clan']['tag']})\n" 
+                f"Start Time: {start_time}\n"
+                f"End Time: {end_time}\n"
+                f"War Size: {war_data['teamSize']}\n" 
+                f"Clan: {war_data['clan']['name']} (Tag: {war_data['clan']['tag']})\n"                
                 f"Opponent: {war_data['opponent']['name']} (Tag: {war_data['opponent']['tag']})\n" 
-                f"Clan Stars: {war_data['clan']['stars']}\n" 
-                f"Opponent Stars: {war_data['opponent']['stars']}\n" 
-                f"Clan Destruction Percentage: {war_data['clan']['destructionPercentage']}\n" 
-                f"Opponent Destruction Percentage: {war_data['opponent']['destructionPercentage']}\n"
+                f"Clan Stars: {war_data['clan']['stars']} (Attacks: {war_data['clan']['attacks']}/{numofAttacks})\n" 
+                f"Opponent Stars: {war_data['opponent']['stars']} (Attacks: {war_data['opponent']['attacks']}/{numofAttacks})\n" 
+                f"Clan Destruction Percentage: {war_data['clan']['destructionPercentage']}%\n" 
+                f"Opponent Destruction Percentage: {war_data['opponent']['destructionPercentage']}%\n"
                 f"```\n"
 
         )
@@ -781,7 +814,7 @@ async def warInfo(interaction:discord.Interaction):
             
         await interaction.followup.send(war_info)
     elif response.status_code == 404: 
-        await interaction.followup.send("No current war found for the specified clan.")
+        await interaction.followup.send("Currently not in CWL. ")
     else:
         await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
 
@@ -821,6 +854,8 @@ async def CWL_clan_search(interaction: discord.Interaction, clanname: str):
         
         if not clan_found:
             await interaction.followup.send(f"Clan '{clanname}' not found in the current CWL.")
+        elif response.status_code == 404: 
+            await interaction.followup.send("Currently not in CWL.")    
     else:
         await interaction.followup.send(f"Error retrieving CWL information: {response.status_code}, {response.text}")
 
