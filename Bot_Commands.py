@@ -18,6 +18,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 client_id = os.getenv('client_id')
 client_secret = os.getenv('client_secret')
 user_agent = os.getenv('user_agent')
+
 #Clash of Clans stuff
 api_key = os.getenv('COC_api_key2')
 clan_tag = '#2QQ2VCU82'.replace('#','%23')
@@ -795,7 +796,7 @@ async def warLog(interaction: discord.Interaction, limit: int=1):
 
 
 
-@bot.tree.command(name = "currentwar", description = "Recieve information about current war")
+@bot.tree.command(name = "currentwar", description = "Recieve general information about current war")
 async def warInfo(interaction:discord.Interaction):
     await interaction.response.defer() # Defer the interaction to allow time for processing 
     
@@ -814,8 +815,7 @@ async def warInfo(interaction:discord.Interaction):
             start_time = format_datetime(war_data.get('startTime', 'N/A'))
             end_time = format_datetime(war_data.get('endTime', 'N/A'))
             numofAttacks = war_data['teamSize'] * 2
-            # clan_badges = war_data['clan']['badgeUrls']
-            # medium_badge_url = clan_badges['medium']
+
             war_info = (
                 f'```yaml\n'
                 f"** Current War Information **\n"
@@ -845,6 +845,102 @@ async def warInfo(interaction:discord.Interaction):
         await interaction.followup.send("No current war found for the specified clan.")
     else:
         await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
+
+@bot.tree.command(name = "currentwarstats", description = "Recieve player's information about current war")
+async def warInfo(interaction:discord.Interaction):
+    await interaction.response.defer() # Defer the interaction to allow time for processing 
+    
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/currentwar' 
+    headers = { 'Authorization': f'Bearer {api_key}', 
+    'Accept': 'application/json' 
+    } 
+    response = requests.get(url, headers=headers) 
+   # print(f"Response status: {response.status_code}, Response text: {response.text}") # Debugging print statement
+    if response.status_code == 200: 
+        war_data = response.json() 
+
+        if war_data['state'] == 'inWar' or war_data['state'] == 'warEnded':
+            start_time = format_datetime(war_data.get('startTime', 'N/A'))
+            end_time = format_datetime(war_data.get('endTime', 'N/A'))
+            numofAttacks = war_data['teamSize'] * 2
+            clan = war_data.get('clan', [])
+            members = clan.get('members', [])
+         #   members = war_data['clan']['members']
+          #  print(f"Members data: " + str(members))  # Debugging statement to see if the list is populated
+            members_with_attacks = []
+            members_without_attacks = []
+
+            for member in members:
+                member_name = member.get('name')
+                th_lvl = member.get('townhallLevel')
+                position = member.get('mapPosition')
+                attacks = member.get('attacks',[])
+                print(f"Member Name: {member_name} {position} {attacks}")
+                total_stars =0
+                total_destruction =0
+                total_attacks = len(attacks) # Counter for the number of attacks
+
+                for attack in attacks:
+                    obtained_stars = attack.get('stars', 0) 
+                    destruction = attack.get('destructionPercentage', 0)
+                    total_stars += obtained_stars
+                    total_destruction += destruction
+                    
+                    
+                member_data = ({
+                    'name': member_name,
+                    'townhallLevel': th_lvl,
+                    'stars': total_stars,
+                    'destruction': total_destruction,
+                    'attacks': total_attacks
+                })
+
+                if total_attacks > 0:
+                    members_with_attacks.append(member_data)
+                else: 
+                    members_without_attacks.append(member_data)
+
+            # Sort by stars (descending) and destruction percentage (descending as a tiebreaker)
+        sorted_with_attacks = sorted(members_with_attacks, key=lambda x: (x['stars'], x['destruction']), reverse=True)
+        sorted_without_attacks = sorted(members_without_attacks, key=lambda x: (x['townhallLevel'], x['name']), reverse=True)
+
+
+        attackers_info = "```yaml\n**Members Who Attacked in Most Recent War:**\n"
+
+        for i,member in enumerate(sorted_with_attacks):
+            attackers_info += (f"{i+1}.{member['name']}: Stars: {member['stars']}, "
+                 f"Percentage: {member['destruction']}%, "
+                 f"Attacks: {member['attacks']}/2\n")
+        
+        attackers_info += "```"
+
+        soon_to_be_attackers = "```yaml\n**Members Who Haven't Attacked in Most Recent War:**\n"
+
+        for i, member in enumerate(sorted_without_attacks):
+            soon_to_be_attackers += (f"{i + 1}. {member['name']}: THlvl: {member['townhallLevel']}, "
+            f"Attacks: {member['attacks']}/2\n")
+                 
+        soon_to_be_attackers +="```"
+        await interaction.followup.send(attackers_info)
+        await interaction.followup.send(soon_to_be_attackers)
+
+
+    elif war_data['state'] == 'notInWar':
+        war_info = (
+                f"```yaml\n"
+                f"**Current War Information**\n"
+                f"State: {war_data['state']}\n"
+                f"```\n"
+        )
+
+        await interaction.followup.send(war_info)
+    elif response.status_code == 404: 
+        await interaction.followup.send("No current war found for the specified clan.")
+    else:
+        await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
+
 
 
 @bot.tree.command(name = "cwlcurrent", description = "Recieve information about current war")
