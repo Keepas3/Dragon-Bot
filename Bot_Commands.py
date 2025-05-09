@@ -11,11 +11,13 @@ import logging.handlers
 from datetime import datetime, timedelta, timezone
 import requests
 import random
+#import mysql.connector
  
 
-
+#Discord Bot Token
 TOKEN = os.getenv('DISCORD_TOKEN')
-#For recieving posts on reddit
+
+#For receiving posts on reddit
 client_id = os.getenv('client_id')
 client_secret = os.getenv('client_secret')
 user_agent = os.getenv('user_agent')
@@ -23,6 +25,22 @@ user_agent = os.getenv('user_agent')
 #Clash of Clans stuff
 api_key = os.getenv('COC_api_key2')
 clan_tag = '#2QQ2VCU82'.replace('#','%23')
+og_clan_tag = '#2QQ2VCU82'
+
+# #Setting up Database connection
+# DATABASE_URL = os.getenv("DATABASE_URL")  # Get Railway database URL 
+# # mysql://${{MYSQLUSER}}:${{MYSQL_ROOT_PASSWORD}}@${{RAILWAY_PRIVATE_DOMAIN}}:3306/${{MYSQL_DATABASE}}
+
+# conn = mysql.connector.connect(
+#     host="${{RAILWAY_PRIVATE_DOMAIN}}",
+#     user="root",
+#     password="${{MYSQL_ROOT_PASSWORD}}",
+#     database="railway"
+# )
+
+# cursor = conn.cursor()
+# cursor.execute("SHOW TABLES")  # Example query
+# print(cursor.fetchall())
 
 
 class LevelFilter(logging.Filter):
@@ -575,23 +593,24 @@ async def clanInfo(interaction: discord.Interaction):
     
     if response.status_code == 200:
         clan_data = response.json()
+        description = clan_data['description']
         
         embed = Embed(
             title="Clan Information",
             color=0x3498db,
-        )
+        ) 
         embed.set_thumbnail(url=clan_data['badgeUrls']['small'])
-        embed.add_field(name="Name", value=clan_data['name'], inline=True)
+        embed.add_field(name="Name", value=f"{clan_data['name']}", inline=True)
         embed.add_field(name="Tag", value=clan_data['tag'], inline=True)
 
-        embed.add_field(name="Members", value=f"{clan_data['members']} / 50", inline=False)
+        embed.add_field(name="Members", value=f":bust_in_silhouette: {clan_data['members']} / 50", inline=False)
 
         embed.add_field(name="Clan Level", value=clan_data['clanLevel'], inline=True)
         embed.add_field(name="Clan Points", value=clan_data['clanPoints'], inline=True)
-        embed.add_field(name="Description", value=clan_data['description'], inline=False)
-        embed.add_field(name="Required Trophies", value=clan_data['requiredTrophies'], inline=False)
-        embed.add_field(name="Win/loss ratio", value=f"{clan_data['warWins']} / {clan_data['warLosses']}", inline=False)
-        embed.add_field(name="Location", value=clan_data['location']['name'], inline=False)
+        embed.add_field(name="Description", value=description, inline=False)
+        embed.add_field(name="Required Trophies", value=f":trophy: {clan_data['requiredTrophies']}", inline=False)
+        embed.add_field(name="Win/loss ratio", value=f":white_check_mark: {clan_data['warWins']} / :x: {clan_data['warLosses']}", inline=False)
+        embed.add_field(name="Location", value=f":globe_with_meridians: {clan_data['location']['name']}", inline=False)
 
         await interaction.followup.send(embed=embed)
     elif response.status_code == 404:
@@ -1099,62 +1118,183 @@ async def warInfo(interaction:discord.Interaction):
 
 
 
-@bot.tree.command(name = "cwlcurrent", description = "Recieve information about current war")
-async def warInfo(interaction:discord.Interaction):
-    await interaction.response.defer() # Defer the interaction to allow time for processing 
+@bot.tree.command(name="cwlcurrent", description="Receive information about the current war")
+async def warInfo(interaction: discord.Interaction):
+    await interaction.response.defer()  # Allow time for processing
+
     if not api_key:
         raise ValueError("API KEY NOT FOUND")
-    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/currentwar/leaguegroup' 
-    headers = { 'Authorization': f'Bearer {api_key}', 
-    'Accept': 'application/json' 
-    } 
-    response = requests.get(url, headers=headers) 
-  #  print(f"Response status: {response.status_code}, Response text: {response.text}") # Debugging print statement
+
+    url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/currentwar/leaguegroup'
+    headers = {'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'}
+    response = requests.get(url, headers=headers)
+
     if response.status_code == 200: 
-        war_data = response.json() 
-        war_info = "No war information available."
+        war_data = response.json()
+        rounds = war_data.get('rounds', [])  # Retrieve CWL rounds
 
-        if 'state' in war_data or war_data['state'] == 'inWar': 
-            if 'clans' in war_data: 
-                clan_info = "\n".join([ f"Clan{i+1}: {clan['name']} (Tag: {clan['tag']})" 
-                for i, clan in enumerate(war_data['clans'])
-                ])
-                war_info = ( 
-                f'```yaml\n' 
-                f"**Current CWL Information**\n" 
-                f"State: {war_data['state']}\n" 
-                f"Season: {war_data['season']}\n" 
-                f"{clan_info}\n" 
-                f"```\n"
+        clan_info_list = []  # Store clans with correct war tags
+
+        for i in range(len(rounds)):  # Process rounds correctly
+            war_tags = rounds[i].get('warTags', [])  # Get war tags for this round
+            war_tags = [tag.replace('#', '%23') for tag in war_tags]  # Sanitize war tags
+
+            opponent_name = "Unknown"
+            opponent_tag = "Unknown"
+            correct_war_tag = None  # Initialize correct war tag
+
+            for war_tag in war_tags:  # Loop through war tags
+                war_url = f'https://api.clashofclans.com/v1/clanwarleagues/wars/{war_tag}'
+                war_response = requests.get(war_url, headers=headers)
+
+                if war_response.status_code == 200:
+                    war_details = war_response.json()
+
+                    war_clan_tag = war_details.get('clan', {}).get('tag', 'Unknown')
+                 #   clean_clan_tag = war_clan_tag.replace('#', '%23')  
+
+                    opponent_tag = war_details.get('opponent', {}).get('tag', 'Unknown')
+                  #  clean_opp_tag = opponent_tag.replace('#', '%23')
+
+                    opponent_name = war_details.get('opponent', {}).get('name', 'Unknown')
+
+                    # Match our clan with a war tag
+                    if war_clan_tag == og_clan_tag or opponent_tag == og_clan_tag:
+                        correct_war_tag = war_tag
+
+                        if opponent_tag == og_clan_tag:
+                            opponent_name = war_details.get('clan', {}).get('name', 'Unknown')
+                            opponent_tag = war_clan_tag
+                        break  # Stop checking once the valid war is found
+
+
+            # Append correct round data
+            clan_info_list.append(
+                f"Round {i+1}:{opponent_name} (Tag: {opponent_tag})- War Tag: {correct_war_tag.replace('%23', '#') or 'No valid war tag'} "
             )
-             
-            else: 
-                war_info = ( 
-                f'```yaml\n' f"** urrent War Information **\n" 
-                f"State: {war_data['state']}\n" 
-                f"No clans data available.\n" f"```\n" 
-                ) 
 
-        elif war_data['state'] == 'preparation':
-            war_info = ( f'```yaml\n' 
-            f"** Current War Information **\n" 
-            f"State: {war_data['state']}\n" 
-            f"```\n"
+        # Format response with YAML structure
+        war_info = (
+            f'```yaml\n'
+            f"**Current CWL War Information**\n"
+            f"State: {war_data.get('state', 'Unknown')}\n"
+            f"Season: {war_data.get('season', 'Unknown')}\n"
+            f"Rounds:\n" + "\n".join(f"{info}" for info in clan_info_list) + f"\n```\n"
+        )
 
-            )
-
-
-        elif 'state' in war_data == 'notInWar': 
-            war_info = ( f'```yaml\n' 
-            f"** Current War Information **\n" 
-            f"State: {war_data['state']}\n" 
-            f"```\n"
-
-            )
-            
         await interaction.followup.send(war_info)
-    elif response.status_code == 404: 
-        await interaction.followup.send("Currently not in CWL. ")
+
+    elif response.status_code == 404:
+        await interaction.followup.send("Currently not in CWL.")
+    else:
+        await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
+
+
+@bot.tree.command(name="cwlspecificwars", description="Receive general information about current war")
+@app_commands.describe(war_tag = "The specific war tag for individual CWL War")
+async def warInfo(interaction: discord.Interaction, war_tag: str):
+    await interaction.response.defer()  # Defer the interaction to allow time for processing
+
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+
+    url= f'https://api.clashofclans.com/v1/clanwarleagues/wars/{war_tag.replace("#", "%23")}'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Accept': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        war_data = response.json()
+        state = war_data['state']
+
+        if state == 'inWar' or state == 'warEnded':
+            start_time = format_datetime(war_data.get('startTime', 'N/A'))
+            end_time = format_datetime(war_data.get('endTime', 'N/A'))
+            num_of_attacks = war_data['teamSize'] 
+            clan_stars = war_data['clan']['stars']
+            opp_stars = war_data['opponent']['stars']
+
+            cwl_clan_tag = war_data['clan']['tag']
+            cwl_opp_tag = war_data['opponent']['tag']
+
+            destruction_percentage = round(war_data['clan']['destructionPercentage'], 2)
+            opp_destruction_percentage = round(war_data['opponent']['destructionPercentage'], 2)
+
+            # Create the embed
+            embed = Embed(
+                title=f"{war_data['clan']['name']} vs {war_data['opponent']['name']}",
+                description=f"State: {war_data['state'].capitalize()}",
+                color=0x00ff00 if  cwl_clan_tag == og_clan_tag and clan_stars > opp_stars 
+                else 0x00ff00 if  cwl_opp_tag == og_clan_tag and clan_stars < opp_stars 
+                else 0xFFFF00 if  cwl_opp_tag == og_clan_tag and clan_stars == opp_stars 
+                else 0x808080  # Green for winning  wars, red is for losing  wars, yellow for ties,  Gray for unknown results
+            )
+            if cwl_clan_tag == og_clan_tag: 
+                embed.set_thumbnail(url=war_data['clan']['badgeUrls']['small'])
+            elif cwl_opp_tag == og_clan_tag:
+                embed.set_thumbnail(url= war_data['opponent']['badgeUrls']['small'])
+
+            embed.add_field(name="Start Time", value=start_time, inline=True)
+            embed.add_field(name="End Time", value=end_time, inline=True)
+
+            embed.add_field(name="War Size", value=war_data['teamSize'], inline=False)
+
+            embed.add_field(name="Clan Tag", value=war_data['clan']['tag'], inline=True)
+            if {war_data['clan']['attacks']} == num_of_attacks:
+                embed.add_field(name="Clan Stars", value=f":star: {clan_stars} (Attacks: {war_data['clan']['attacks']}/{num_of_attacks} :white_check_mark:)", inline=True)
+            else:
+                embed.add_field(name="Clan Stars", value=f":star: {clan_stars} (Attacks: {war_data['clan']['attacks']}/{num_of_attacks})", inline=True)
+
+            if destruction_percentage == 100:
+                embed.add_field(name="Clan Destruction", value=f":fire: {destruction_percentage}%", inline=True)
+            else:
+                embed.add_field(name="Clan Destruction", value=f"{destruction_percentage}%", inline=True)
+
+            embed.add_field(name="Opponent Tag", value=war_data['opponent']['tag'], inline=True)
+            embed.add_field(name="Opponent Stars", value=f":star: {opp_stars} (Attacks: {war_data['opponent']['attacks']}/{num_of_attacks})", inline=True)
+            embed.add_field(name="Opponent Destruction", value=f"{opp_destruction_percentage}%", inline=True)
+
+            embed.set_footer(text="Clash of Clans Current War Information")
+
+            await interaction.followup.send(embed=embed)
+
+        elif state == 'preparation':
+            start_time = format_datetime(war_data.get('startTime', 'N/A'))
+            end_time = format_datetime(war_data.get('endTime', 'N/A'))
+            preparation_time = format_datetime(war_data.get('preparationStartTime', 'N/A'))
+
+            # Create the embed
+            embed = Embed(
+                title="War Preparation",
+                description="Current War is in preparation state.",
+                color=0xFFFF00  # Yellow for preparation
+            )
+            embed.add_field(name="Preparation Start Time", value=preparation_time, inline=True)
+            embed.add_field(name="Start Time", value=start_time, inline=True)
+            embed.add_field(name="End Time", value=end_time, inline=True)
+            embed.add_field(name="War Size", value=war_data['teamSize'], inline=True)
+            embed.add_field(name="Clan", value=f"{war_data['clan']['name']} (Tag: {war_data['clan']['tag']})", inline=False)
+            embed.add_field(name="Opponent", value=f"{war_data['opponent']['name']} (Tag: {war_data['opponent']['tag']})", inline=False)
+            embed.set_footer(text="Clash of Clans War Preparation Info")
+
+            await interaction.followup.send(embed=embed)
+
+        elif state == 'notInWar':
+            # Create the embed for not in war state
+            embed = Embed(
+                title="No Active War",
+                description="The clan is currently not in war.",
+                color=0xFF2C2C  # Blue for no war
+            )
+            embed.add_field(name="State", value=war_data['state'], inline=False)
+            embed.set_footer(text="Clash of Clans Current War Info")
+
+            await interaction.followup.send(embed=embed)
+
+    elif response.status_code == 404:
+        await interaction.followup.send("No current war found for the specified clan.")
     else:
         await interaction.followup.send(f"Error retrieving current war info: {response.status_code}, {response.text}")
 
@@ -1238,18 +1378,6 @@ with open('profanity_en.csv', 'r', encoding='utf-8') as file:
             'severity_rating': float(row['severity_rating']),
             'severity_description': row['severity_description']
         } 
-        # alternate_words = [ 
-        #     row['canonical_form_1'].strip().lower(), 
-        #     row.get('canonical_form_2', '').strip().lower(), 
-        #     row.get('canonical_form_3', '').strip().lower() 
-        # ]
-        # alternate_word = row['canonical_form_1'].strip().lower()
-        # alternate_word2 = row['canonical_form_2'].strip().lower()
-
-        # for alt_word in alternate_words: 
-        #     if alt_word and alt_word != primary_word: 
-        #         inappropriate_words[alt_word] = inappropriate_words[primary_word]
-#print("Inappropriate words loaded:", inappropriate_words) 
 
 user_scores = {}   
 user_warnings ={}     
