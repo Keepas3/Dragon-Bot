@@ -11,7 +11,18 @@ from discord import Embed
 import logging.handlers
 from datetime import datetime, timedelta, timezone
 import random
- 
+import time
+import mysql.connector
+
+# Connect to MySQL Database
+conn = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password=os.getenv("MY_SQL_PASSWORD"),
+    database=os.getenv("MY_SQL_DATABASE")
+)
+
+
 
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -116,12 +127,45 @@ async def clear_commands():
         print("Executed")
     except Exception as e:
         print({e})
+# @bot.event
+# async def on_ready():
+#     """Fetch clan tags dynamically for all servers when the bot starts."""
+#     await bot.tree.sync()  # Sync commands globally
+#     await bot.change_presence(activity=discord.Game(name='With Fire'))
+
+#     global clan_tags  # Dictionary to store clan tags per server
+#     clan_tags = {}  # Reset tags on startup
+
+#     # Loop through all servers the bot is in
+#     for guild in bot.guilds:
+#         cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild.id,))
+#         result = cursor.fetchone()
+
+#         if result and result[0]:
+#             clan_tags[guild.id] = result[0].replace('#', '%23')  # Store clan tag per server
+#         else:
+#             clan_tags[guild.id] = None  # Set as None if no clan tag is found
+
+#         print(f"Loaded clan tag for {guild.name}: {clan_tags[guild.id]}")
+
+#     print(f'Logged in as {bot.user}!')
+
 @bot.event
 async def on_ready():
-    await bot.tree.sync() # Remove GUILD ID if using global guild = GUILD_ID
+    """Fetch clan tags dynamically and update bot's nickname."""
+    await bot.tree.sync()  # Sync commands globally
     await bot.change_presence(activity=discord.Game(name='With Fire'))
+
+    for guild in bot.guilds:
+        cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild.id,))
+        result = cursor.fetchone()
+
+        if result and result[0]:  # Ensure there's a valid clan tag
+            clan_tag = result[0]
+            await guild.me.edit(nick=f"{bot.user.name} | {clan_tag}")  # Update bot's nickname
+            print(f"Updated bot nickname in {guild.name} to: {bot.user.name} | {clan_tag}")
+
     print(f'Logged in as {bot.user}!')
-  #  print(f"Synced Commands to {GUILD_ID.id}")
 
 @bot.tree.command(name ="announce", description ="Make an announcement")
 async def announce(interaction: discord.Interaction, message: str):
@@ -139,6 +183,107 @@ async def stats(interaction: discord.Interaction):
     )
     print(f"Sending stats: {stats_message}") # Debugging print statement
     await interaction.response.send_message(stats_message)
+
+# @bot.tree.command(name="ping", description="Ping the bot")
+# async def ping(interaction: discord.Interaction):
+#     latency = round(bot.latency * 1000)
+#     ping_message = f"{latency} ms" 
+#     print(f"Sending ping: {ping_message}")  # Debugging print statement
+
+cursor = conn.cursor()
+
+# cursor.execute("INSERT INTO servers (guild_id, guild_name) VALUES (%s, %s)", ("123456789", "Test Server"))
+# conn.commit()
+
+cursor.execute("SELECT * FROM servers")
+result = cursor.fetchall()
+print(result)  # Should return stored server data
+def get_clan_tag(guild_id):
+    """Retrieve the clan tag for a given Discord server."""
+    cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild_id,))
+    result = cursor.fetchone()
+    
+    if result and result[0]:  # Ensure there's a valid clan tag
+        return result[0]
+    else:
+        return None  # Return None if no clan tag is set
+@bot.event
+async def on_guild_join(guild):
+    """Automatically adds the guild_id to the database when bot joins a server."""
+    cursor.execute("INSERT INTO servers (guild_id, guild_name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE guild_name = VALUES(guild_name)", (str(guild.id), guild.name))
+    conn.commit()
+    print(f"Added {guild.name} ({guild.id}) to the database.")
+ 
+import discord
+
+@bot.tree.command(name="help", description="Displays available bot commands")
+async def help_command(interaction: discord.Interaction):
+    """Sends an embed with categorized commands."""
+    embed = discord.Embed(
+        title="🛠️ Bot Commands",
+        description="Here are the available commands, categorized for easy navigation:",
+        color=0x00FF00  # Green color
+    )
+
+    # 🛡️ Clans Category
+    embed.add_field(
+        name="🛡️ Clans",
+        value=(
+            "`/clanmembers` - View clan members ranked by trophies\n"
+            "`/lookupclans` - Search for clans\n"
+            "`/lookupmember` - Get Clan info for a specific user\n"
+            "`/claninfo` - Retrieve information about the clan\n"
+            "`/capitalraid` - Retrieve info on current raid for clan\n"
+            "`/previousraids` - Retrieve info about previous seasons for the clan\n"
+            "`/warlog` - Retrieve the clan's war log\n"
+            "`/currentwar` - Retrieve the clan's current war\n"
+            "`/currentwarstats` - Display members' stats in current war\n"
+            "`/cwlcurrent` - Retrieve the clan's current CWL\n"
+            "`/cwlspecificwars` - Retrieve individual war info in CWL\n"
+            "`/cwlclansearch` - Search for CWL clan and display CWL roster"
+        ),
+        inline=False
+    )
+
+    # ⚔️ Players Category
+    embed.add_field(
+        name="⚔️ Players",
+        value=(
+            "`/playerinfo` - Get player's general information\n"
+            "`/playertroops` - Get a player's troop levels\n"
+            "`/playerheroes` - Get a player's heroes/equipments\n"
+            "`/playerequipments` - Get info on all of a player's equipments\n"
+            "`/playerspells` - Get player's spell levels"
+        ),
+        inline=False
+    )
+
+    # 📜 Misc Category
+    embed.add_field(
+        name="📜 Misc",
+        value=(
+            "`/announce` - Make an announcement through the bot\n"
+            "`/serverstatus` - View tags of the server\n"
+            "`/4k` - I caught you in 4K\n"
+            "`/flipcoin` - Flip a coin (heads or tails)\n"
+            "`/receiveposts` - Get posts from Reddit"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="🔧 Settings",
+        value =(
+            "`/setclantag` - Set the clan tag for this server(This will affect clan commands) \n"
+            "`/link` - Link your Clash of Clans account to your Discord account\n"
+            "`/unlink` - Unlink your Clash of Clans account from your Discord account\n"
+            "`/warnings` - Get the number of warnings for a specific user\n"
+            "`/adjustwarnings` - Adjust the number of warnings for a specific user\n"
+        )
+    )
+
+    embed.set_footer(text="Use /command_name to execute a command.")
+
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name = "4k", description = "I Caught you")
 async def fourK(interaction: discord.Interaction):
@@ -169,38 +314,222 @@ def check_coc_clan_tag(clan_tag):
     elif response.status_code == 404: 
         return False
 
-@bot.tree.command(name = 'setclantag')
+def check_coc_player_tag(player_tag): 
+    url = f'https://api.clashofclans.com/v1/players/{player_tag}' 
+    headers = { 'Authorization': f'Bearer {api_key}', 'Accept': 'application/json' }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return True
+    elif response.status_code == 404:
+        return False
+
+# @bot.tree.command(name = 'setclantag' )
+# async def set_clan_tag(interaction: discord.Interaction, new_tag: str):
+#     if check_coc_clan_tag(new_tag.replace('#', '%23')):
+#         global clan_tag
+#         clan_tag = new_tag.replace('#', '%23')
+#         await interaction.response.send_message(f'Clan tag has been updated to {new_tag}')
+#     else:
+#         await interaction.response.send_message(f"Not a valid Clan ID") 
+
+# @bot.tree.command(name='setclantag', description="Set the clan tag for this server")
+# async def set_clan_tag(interaction: discord.Interaction, new_tag: str):
+#     """Updates the clan tag in the database for the current server."""
+#     if check_coc_clan_tag(new_tag.replace('#', '%23')):  # Validate the tag
+#         global clan_tag
+#         clan_tag = new_tag.replace('#', '%23')  # Update global variable
+
+#         # Update the database
+#         cursor.execute("UPDATE servers SET clan_tag = %s WHERE guild_id = %s", (new_tag, interaction.guild.id))
+#         conn.commit()
+
+#         await interaction.response.send_message(f'Clan tag has been updated to {new_tag}')
+#     else:
+#         await interaction.response.send_message(f"Not a valid Clan ID")
+
+@bot.tree.command(name='setclantag', description="Set the clan tag for this server")
 async def set_clan_tag(interaction: discord.Interaction, new_tag: str):
-    if check_coc_clan_tag(new_tag.replace('#', '%23')):
-        global clan_tag
-        clan_tag = new_tag.replace('#', '%23')
-        await interaction.response.send_message(f'Clan tag has been updated to {new_tag}')
+    """Updates the clan tag in the database and changes the bot's nickname."""
+    guild_id = interaction.guild.id  # Get current server ID
+
+    if check_coc_clan_tag(new_tag.replace('#', '%23')):  # Validate the tag
+        # Update the database
+        cursor.execute("UPDATE servers SET clan_tag = %s WHERE guild_id = %s", (new_tag, guild_id))
+        conn.commit()
+
+        # Change the bot's nickname
+        await interaction.guild.me.edit(nick=f"{bot.user.name} | {new_tag}")
+        
+        await interaction.response.send_message(f'Clan tag has been updated to {new_tag} for this server!')
     else:
-        await interaction.response.send_message(f"Not a valid Clan ID") 
+        await interaction.response.send_message(f"Not a valid Clan ID")
 
-@set_clan_tag.error 
-async def set_clan_tag_error(interaction: discord.Interaction, error): 
-    if isinstance(error, app_commands.MissingRole): 
-        await interaction.response.send_message("You don't have permission to use this command.") 
+
+@bot.tree.command(name='link', description="Link your Clash of Clans account to your Discord account")
+async def link(interaction: discord.Interaction, player_tag: str):
+    """Links a Clash of Clans account to the player's Discord ID and current server."""
+    # player_tag = player_tag.replace('#', '%23')
+
+    discord_id = interaction.user.id # Get Discord ID of user
+    discord_username = interaction.user.name
+
+    guild_id = interaction.guild.id  # Get current server ID
+    guild_name = interaction.guild.name
+
+    # Insert player data, ensuring it's linked to the correct server
+    if check_coc_player_tag(player_tag.replace('#', '%23')):  # Validate the player tag
+        cursor.execute("""
+            INSERT INTO players (discord_id, discord_username, guild_id, guild_name, player_tag)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE player_tag = VALUES(player_tag), discord_username = VALUES(discord_username), guild_name = VALUES(guild_name)
+        """, (discord_id, discord_username, guild_id, guild_name, player_tag))
+
+        conn.commit()
+        await interaction.response.send_message(f"Your Clash of Clans account with tag {player_tag} has been linked to your Discord account in this server.")
+
     else:
-        await interaction.response.send_message(f"An error occurred: {error}")                  
+        await interaction.response.send_message(f"Not a valid player tag. Please check and try again.")
 
-# @bot.tree.command(name = "clean", description ='Clean messages from the bot')
-# async def clean(interaction : discord.Interaction, limit: int =2):
-#     await interaction.response.defer()
-#     if limit < 2 or limit >10:
-#         limit = 2
-#     deleted = await interaction.channel.purge(limit =limit)
-#     await interaction.followup.send(f"Deleted {len(deleted)} messages")
+@bot.tree.command(name='unlink', description="Unlink your Clash of Clans account from your Discord account")
+async def unlink(interaction: discord.Interaction):
+    """Removes the player's linked Clash of Clans account from the database."""
+    
+    discord_id = interaction.user.id  # Get Discord ID of user
+    guild_id = interaction.guild.id  # Get current server ID
+
+    # Check if the user has a linked account
+    cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (discord_id, guild_id))
+    result = cursor.fetchone()
+
+    if not result:  # If no linked account exists
+        await interaction.response.send_message("You don't have a linked Clash of Clans account.")
+        return
+
+    # Remove the linked account from the database
+    cursor.execute("DELETE FROM players WHERE discord_id = %s AND guild_id = %s", (discord_id, guild_id))
+    conn.commit()
+
+    await interaction.response.send_message("Your Clash of Clans account has been successfully unlinked.")
+
+@bot.tree.command(name="serverstatus", description="Get the server status")
+async def server_status(interaction: discord.Interaction):
+    """Fetches the server's clan tag and all linked Discord usernames."""
+    
+    guild_id = interaction.guild.id  # Get current server ID
+
+    # Fetch the clan tag for the server
+    cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild_id,))
+    clan_result = cursor.fetchone()
+    clan_tag = clan_result[0] if clan_result else "No clan tag set"
+
+    # Fetch all linked Discord usernames
+    cursor.execute("SELECT discord_username, player_tag FROM players WHERE guild_id = %s", (guild_id,))
+    player_results = cursor.fetchall()
+
+    if not player_results:
+        player_info = "No linked players found."
+    else:
+        player_info = "\n".join([
+            f"{username} - {'Linked' if player_tag else 'Not Linked'}"
+            for username, player_tag in player_results
+        ])
+
+    # Create embed
+    embed = discord.Embed(
+        title=f"Server Status for {interaction.guild.name}",
+        description=f"**Clan Tag:** {clan_tag}\n\n**Linked Players:**\n{player_info}",
+        color=0x3498db
+    )
+
+    await interaction.response.send_message(embed=embed)
 
 
+# @bot.tree.command(name="playerinfo", description="Get player's general information")
+# async def player_info(interaction: discord.Interaction, player_tag: str):
+#     player_tag = player_tag.replace('#', '%23')
+#     if not api_key:
+#         raise ValueError("API KEY NOT FOUND")
+
+#     url = f'https://api.clashofclans.com/v1/players/{player_tag}'
+#     headers = {
+#         'Authorization': f'Bearer {api_key}',
+#         'Accept': 'application/json'
+#     }
+#     response = requests.get(url, headers=headers)
+
+#     if response.status_code == 200:
+#         player_data = response.json()
+#         labels = [label for label in player_data['labels']]
+#         filtered_labels = ', '.join([f"{label['name']}" for label in labels])
+#         player_name = player_data['name']
+#         role = player_data['role']
+#         preference = player_data['warPreference']
+
+#         # Create a Discord Embed object
+#         if role == 'admin':
+#             role = "Elder"
+#         elif role == 'coLeader':
+#             role = "Co-Leader"
+#         elif role == 'leader':
+#             role = "Leader"
+#         elif role == 'member':
+#             role == "Member"
+        
+        
+#         embed = discord.Embed(
+
+#             title=f"User: {player_name}, {player_data['tag']}",
+#             description=filtered_labels if filtered_labels else 'None',
+#             # url=f"https://www.clashofstats.com/players/{player_name}-{player_tag}/summary",
+#             color=0x0000FF  # Set an aesthetic color for the embed
+#         )
+#         embed.set_thumbnail(url=player_data['league']['iconUrls']['small'])
+#         embed.add_field(name="Clan Name", value=player_data['clan']['name'], inline=True)
+#         embed.add_field(name="Tag", value=player_data['clan']['tag'], inline=True)
+#         embed.add_field(name="Role", value=role, inline=True)
+
+#         embed.add_field(name="TH Lvl", value=player_data['townHallLevel'], inline=True)
+#         embed.add_field(name="Exp Lvl", value=player_data['expLevel'], inline=True)
+#         if preference == 'in':
+#             embed.add_field(name="War Preference", value=f":white_check_mark: {preference}", inline=True)
+#         elif preference == 'out':
+#             embed.add_field(name="War Preference", value=f":x: {preference}", inline=True)
+        
+#         embed.add_field(name="Trophies", value=f":trophy:  {player_data['trophies']}", inline=True)
+#         embed.add_field(name="Best Trophies", value=f":trophy: {player_data['bestTrophies']}", inline=True)
+#         embed.add_field(name="War Stars", value=f":star: {player_data['warStars']}", inline=True)
+
+#         embed.add_field(name="Donated", value=player_data['donations'], inline=True)
+#         embed.add_field(name="Received", value=player_data['donationsReceived'], inline=True)
+#         embed.add_field(name="Capital Contributions", value=player_data['clanCapitalContributions'], inline=True)
+
+#         # Send the embed response
+#         await interaction.response.send_message(embed=embed)
+#     else:
+#         await interaction.response.send_message(f"Error getting player information: {response.status_code}")
 
 @bot.tree.command(name="playerinfo", description="Get player's general information")
-async def player_info(interaction: discord.Interaction, player_tag: str):
+async def player_info(interaction: discord.Interaction, user: discord.Member, player_tag: str = None):
+    """Fetches player info by Discord user first, then falls back to player tag if needed."""
+
+    # Check the database for the selected user's linked player tag
+    cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (user.id, interaction.guild.id))
+    result = cursor.fetchone()
+
+    if result and result[0]:  # If a player tag is found, use it
+        player_tag = result[0]
+    elif not player_tag:  # If no player tag is found and none was provided, return an error
+        await interaction.response.send_message(f"{user.mention} has not linked a Clash of Clans account. Please provide a player tag manually.")
+        return
+
+    # Format player tag for API request
     player_tag = player_tag.replace('#', '%23')
+
+    # Ensure API key exists
     if not api_key:
         raise ValueError("API KEY NOT FOUND")
 
+    # Fetch player data from Clash of Clans API
     url = f'https://api.clashofclans.com/v1/players/{player_tag}'
     headers = {
         'Authorization': f'Bearer {api_key}',
@@ -208,6 +537,7 @@ async def player_info(interaction: discord.Interaction, player_tag: str):
     }
     response = requests.get(url, headers=headers)
 
+    
     if response.status_code == 200:
         player_data = response.json()
         labels = [label for label in player_data['labels']]
@@ -216,40 +546,37 @@ async def player_info(interaction: discord.Interaction, player_tag: str):
         role = player_data['role']
         preference = player_data['warPreference']
 
-        # Create a Discord Embed object
-        if role == 'admin':
-            role = "Elder"
-        elif role == 'coLeader':
-            role = "Co-Leader"
-        elif role == 'leader':
-            role = "Leader"
-        elif role == 'member':
-            role == "Member"
-        
-        
-        embed = discord.Embed(
+        timestamp = int(time.time())
 
+        # Adjust role names
+        role_mapping = {
+            'admin': "Elder",
+            'coLeader': "Co-Leader",
+            'leader': "Leader",
+            'member': "Member"
+        }
+        role = role_mapping.get(role, role)
+
+        # Create Discord Embed
+        embed = discord.Embed(
             title=f"User: {player_name}, {player_data['tag']}",
-            description=filtered_labels if filtered_labels else 'None',
-            # url=f"https://www.clashofstats.com/players/{player_name}-{player_tag}/summary",
+            description = f"{filtered_labels if filtered_labels else 'None'}\nLast updated: <t:{timestamp}:R>",
             color=0x0000FF  # Set an aesthetic color for the embed
         )
         embed.set_thumbnail(url=player_data['league']['iconUrls']['small'])
         embed.add_field(name="Clan Name", value=player_data['clan']['name'], inline=True)
         embed.add_field(name="Tag", value=player_data['clan']['tag'], inline=True)
         embed.add_field(name="Role", value=role, inline=True)
-
         embed.add_field(name="TH Lvl", value=player_data['townHallLevel'], inline=True)
         embed.add_field(name="Exp Lvl", value=player_data['expLevel'], inline=True)
-        if preference == 'in':
-            embed.add_field(name="War Preference", value=f":white_check_mark: {preference}", inline=True)
-        elif preference == 'out':
-            embed.add_field(name="War Preference", value=f":x: {preference}", inline=True)
-        
+
+        # War Preference
+        war_pref_icons = {'in': ":white_check_mark:", 'out': ":x:"}
+        embed.add_field(name="War Preference", value=f"{war_pref_icons.get(preference, '')} {preference}", inline=True)
+
         embed.add_field(name="Trophies", value=f":trophy:  {player_data['trophies']}", inline=True)
         embed.add_field(name="Best Trophies", value=f":trophy: {player_data['bestTrophies']}", inline=True)
         embed.add_field(name="War Stars", value=f":star: {player_data['warStars']}", inline=True)
-
         embed.add_field(name="Donated", value=player_data['donations'], inline=True)
         embed.add_field(name="Received", value=player_data['donationsReceived'], inline=True)
         embed.add_field(name="Capital Contributions", value=player_data['clanCapitalContributions'], inline=True)
@@ -259,55 +586,94 @@ async def player_info(interaction: discord.Interaction, player_tag: str):
     else:
         await interaction.response.send_message(f"Error getting player information: {response.status_code}")
 
-@bot.tree.command(name="playertroops", description="Get a player's troop levels") 
-@app_commands.describe(player_tag="The user's tag", village="The type of village: home(default), builder or both")
-async def player_troops(interaction: discord.Interaction, player_tag: str, village: str ="home"): 
-    player_tag = player_tag.replace('#', '%23') 
-    url = f'https://api.clashofclans.com/v1/players/{player_tag}' 
-    headers = { 'Authorization': f'Bearer {api_key}', 
-    'Accept': 'application/json' 
-    }
+@bot.tree.command(name="playertroops", description="Get a player's troop levels")
+@app_commands.describe(user="Select a Discord user", player_tag="The user's tag (optional)", village="The type of village: home(default), builder or both")
+async def player_troops(interaction: discord.Interaction, user: discord.Member = None, player_tag: str = None, village: str = "home"):
+    """Fetches troop levels by Discord user first, then falls back to player tag if needed."""
 
-    response = requests.get(url, headers=headers) 
-    if response.status_code == 200: 
-        player_data = response.json() 
-    #    name = player_data['name']
+    # If a Discord user is provided, check the database for their player tag
+    if user:
+        cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (user.id, interaction.guild.id))
+        result = cursor.fetchone()
+
+        if result and result[0]:  # If a player tag is found, use it
+            player_tag = result[0]
+        else:
+            await interaction.response.send_message(f"{user.mention} has not linked a Clash of Clans account. Please provide a player tag manually.")
+            return
+
+    # If no player tag is provided, return an error
+    if not player_tag:
+        await interaction.response.send_message("Please provide a player tag or mention a user who has linked their account.")
+        return
+
+    # Format player tag for API request
+    player_tag = player_tag.replace('#', '%23')
+
+    # Ensure API key exists
+    if not api_key:
+        raise ValueError("API KEY NOT FOUND")
+
+    # Fetch player data from Clash of Clans API
+    url = f'https://api.clashofclans.com/v1/players/{player_tag}'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Accept': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        player_data = response.json()
 
         exclude_words = ['super', 'sneaky', 'ice golem', 'inferno', 'rocket balloon', 'ice hound']
 
-        def is_valid_troop(troop): 
+        def is_valid_troop(troop):
             return all(word not in troop['name'].lower() for word in exclude_words)
-            
-        if village.lower() == 'builder': 
-             filtered_troops = [troop for troop in player_data['troops'] if troop['village'] == 'builderBase' and is_valid_troop(troop)]
-        elif village.lower() == 'home': 
-            filtered_troops = [troop for troop in player_data['troops'] if troop['village'] == 'home' and is_valid_troop(troop)]
-        else: 
-            filtered_troops = [troop for troop in player_data['troops'] if is_valid_troop(troop)]
 
-      #  filtered_troops = [troop for troop in player_data['troops'] if 'super' not in troop['name'].lower()]
+        # Filter troops based on village type
+        if village.lower() == 'builder':
+            filtered_troops = [troop for troop in player_data['troops'] if troop['village'] == 'builderBase' and is_valid_troop(troop)]
+        elif village.lower() == 'home':
+            filtered_troops = [troop for troop in player_data['troops'] if troop['village'] == 'home' and is_valid_troop(troop)]
+        else:
+            filtered_troops = [troop for troop in player_data['troops'] if is_valid_troop(troop)]
 
         troops = '\n'.join([
             f"{troop['name']}: Level {troop['level']}/{troop['maxLevel']} {'(MAXED)' if troop['level'] == troop['maxLevel'] else ''}"
             for troop in filtered_troops])
 
-        troop_information = ( 
-            f"```yaml\n" 
+        troop_information = (
+            f"```yaml\n"
             f"Name: {player_data['name']}\n"
-            f"Tag: {player_data['tag']}\n"  
-            f"**Troop Levels**\n" 
-            f"{troops}\n" 
-            f"```\n" 
+            f"Tag: {player_data['tag']}\n"
+            f"**Troop Levels**\n"
+            f"{troops}\n"
+            f"```\n"
         )
-        await interaction.response.send_message(f"{troop_information}") 
-    else: 
-        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}') 
+        await interaction.response.send_message(f"{troop_information}")
+    else:
+        await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')
 
 
 
 @bot.tree.command(name ="playerheroes", description = "Get a player's heroes/equipments")
-@app_commands.describe(player_tag = "The User's tag")
-async def player_heroes(interaction: discord.Interaction, player_tag: str):
+@app_commands.describe(user = "Select a Discord user", player_tag = "The user's tag (optional)", village = "The type of village: home(default), builder or both")
+async def player_heroes(interaction: discord.Interaction, user: discord.Member = None, player_tag: str = None, village: str = "home"):
+    if user:
+        cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (user.id, interaction.guild.id))
+        result = cursor.fetchone()
+
+        if result and result[0]:  # If a player tag is found, use it
+            player_tag = result[0]
+        else: 
+            await interaction.response.send_message(f"{user.mention} has not linked a Clash of Clans account. Please provide a player tag manually.")
+            return
+        
+    if not player_tag:
+        await interaction.response.send_message("Please provide a player tag or mention a user who has linked their account.")
+        return
+
+
     playertag = player_tag.replace('#','%23')
     url = f'https://api.clashofclans.com/v1/players/{playertag}'
     headers ={ 'Authorization': f'Bearer {api_key}',
@@ -353,8 +719,24 @@ async def player_heroes(interaction: discord.Interaction, player_tag: str):
 
 
 @bot.tree.command(name = "playerequipments", description = "Get info on all of a player's equipments")
-@app_commands.describe(player_tag = "The user's tag")
-async def player_equips(interaction: discord.Interaction, player_tag: str):
+@app_commands.describe(user= "Select a Discord User",player_tag = "The user's tag(optional)")
+async def player_equips(interaction: discord.Interaction, user: discord.Member = None, player_tag: str = None):
+
+    if user:
+        cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (user.id, interaction.guild.id))
+        result = cursor.fetchone()
+
+        if result and result[0]:  # If a player tag is found, use it
+            player_tag = result[0]
+
+        else:
+            await interaction.response.send_message(f"{user.mention} has not linked a Clash of Clans account. Please provide a player tag manually.")
+            return
+        
+    if not player_tag:
+        await interaction.response.send_message("Please provide a player tag or mention a user who has linked their account.")
+        return
+    # Format player tag for API request
     playertag = player_tag.replace('#', '%23')
     url = f'https://api.clashofclans.com/v1/players/{playertag}'
     headers = { 'Authorization': f'Bearer {api_key}',
@@ -395,8 +777,24 @@ Tag: {player_data['tag']}
 
 
 @bot.tree.command(name = "playerspells", description = "Get player's spell levels")
-@app_commands.describe(player_tag = "The user's tag")
-async def player_spells(interaction: discord.Interaction, player_tag: str):
+@app_commands.describe(user = "Select a Discord User", player_tag = "The user's tag (optional)")
+async def player_spells(interaction: discord.Interaction, user: discord.Member= None, player_tag: str = None):
+
+    if user:
+        cursor.execute("SELECT player_tag FROM players WHERE discord_id = %s AND guild_id = %s", (user.id, interaction.guild.id))
+        result = cursor.fetchone()
+
+        if result and result[0]:  # If a player tag is found, use it
+            player_tag = result[0]
+
+        else:
+            await interaction.response.send_message(f"{user.mention} has not linked a Clash of Clans account. Please provide a player tag manually.")
+            return
+        
+    if not player_tag:
+        await interaction.response.send_message("Please provide a player tag or mention a user who has linked their account.")
+        return
+    
     playertag = player_tag.replace('#', '%23')
     url= f'https://api.clashofclans.com/v1/players/{playertag}'
     headers ={ 'Authorization': f'Bearer {api_key}',
@@ -433,6 +831,15 @@ async def player_spells(interaction: discord.Interaction, player_tag: str):
 @bot.tree.command(name="clanmembers", description="Get all member info of the clan sorted by trophies by default") 
 @app_commands.describe(ranking= "List by trophies(default), TH, role, tag")
 async def clan_members(interaction: discord.Interaction, ranking: str = "TROPHIES"): 
+    # Get the clan tag from the database for the current server
+    guild_id = interaction.guild.id
+    cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild_id,))
+    result = cursor.fetchone()
+    if not result or not result[0]:
+        await interaction.response.send_message("No clan tag is set for this server. Please set a clan tag using /setclantag.")
+        return
+    
+    clan_tag = result[0].replace('#', '%23')  # Format the clan tag for the API request
     await interaction.response.defer()  # Defer the interaction to allow time for processing
     url = f'https://api.clashofclans.com/v1/clans/{clan_tag}/members'
     headers = { 
@@ -490,37 +897,6 @@ async def clan_members(interaction: discord.Interaction, ranking: str = "TROPHIE
         await interaction.response.send_message(f'Error: {response.status_code}, {response.text}')
 
 
-#All the info you get is start and end date :(
-# @bot.tree.command(name ="goldpass", description= "Information about start/end of current gold pass")
-# async def goldpass(interaction: discord.Interaction):
-#     await interaction.response.defer()
-#     url = f'https://api.clashofclans.com/v1/goldpass/seasons/current'
-#     headers = {
-#         'Authorization': f'Bearer {api_key}',
-#     'Accept': 'application/json'
-#     }
-#     response = requests.get(url, headers=headers)
-#     if response.status_code ==200:
-#         gold_pass_data = response.json()
-        
-#         start = gold_pass_data.get('startTime')
-#         end = gold_pass_data.get('endTime')
-
-#         start_date = format_datetime(start)
-#         end_date = format_datetime(end)
-#         pass_info = (
-#             f"** Gold Pass: **\n"
-#             f"```yaml\n"
-#            # f"Current Gold Pass Season: {gold_pass_data['name']}\n"
-#             f"Start Date:{start_date}\n"
-#             f"End Date:{end_date}\n"
-#             f"```"
-
-#         )
-#         await interaction.followup.send(pass_info)
-#     else: 
-#         await interaction.followup.send(f"Error retrieving gold pass information: {response.status_code}, {response.text}")
-    
 @bot.tree.command(name ="lookupclans", description = "search for clans")
 @app_commands.describe(clanname = "The clan's name", war_frequency = "Filter by war frequency (always)", min_members = "Filter by minimum num. of members", 
 max_members = "Filter by maximum num. of members", minclan_level = "Filter by clan Level", limits="Number of clans to return (default 1, max 3)")
@@ -583,8 +959,19 @@ max_members: int = None, minclan_level: int = None , limits: int=1
 
 
 
+
 @bot.tree.command(name="lookupmember", description="Get Clan info for a specific user")
+@app_commands.describe(username = "A clan member's name")
 async def user_info(interaction: discord.Interaction, username: str):
+    guild_id = interaction.guild.id
+    cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild_id,))
+    result = cursor.fetchone()
+
+    if not result or not result[0]:
+        await interaction.response.send_message("No clan tag is set for this server. Please set a clan tag using /setclantag.")
+        return
+
+    clan_tag = result[0].replace('#', '%23')  # Format the clan tag for the API request
     await interaction.response.defer()  # Defer the interaction to allow time for processing
 
     url = f'https://api.clashofclans.com/v1/clans/{clan_tag}'
@@ -634,6 +1021,13 @@ async def user_info(interaction: discord.Interaction, username: str):
 
 @bot.tree.command(name="claninfo", description="Retrieve information about the clan")
 async def clanInfo(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
+    cursor.execute("SELECT clan_tag FROM servers WHERE guild_id = %s", (guild_id,))
+    result = cursor.fetchone()
+
+    if not result or not result[0]:
+        await interaction.response.send_message("No clan tag is set for this server. Please set a clan tag using /setclantag.")
+        return
     await interaction.response.defer()
     if not api_key:
         raise ValueError("API KEY NOT FOUND")
@@ -648,9 +1042,12 @@ async def clanInfo(interaction: discord.Interaction):
     if response.status_code == 200:
         clan_data = response.json()
         description = clan_data['description']
+
+        timestamp = int(time.time() //60 * 60) # Convert to seconds
         
         embed = Embed(
             title="Clan Information",
+            description = f"Last updated: <t:{timestamp}:R>",
             color=0x3498db,
         )
         embed.set_thumbnail(url=clan_data['badgeUrls']['small'])
